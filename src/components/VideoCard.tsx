@@ -7,14 +7,20 @@ import { FadeImage, VerifiedBadge } from './FadeImage';
 export interface VideoCardProps {
   video: Video;
   onSelectVideo: (video: Video) => void;
+  onSelectInfo?: (video: Video) => void;
   layout?: 'grid' | 'list';
+  isGenreCard?: boolean;
+  isGenreBlurOverlay?: boolean;
   key?: string | number;
 }
 
 export const VideoCard = ({
   video,
   onSelectVideo,
+  onSelectInfo,
   layout = 'grid',
+  isGenreCard = false,
+  isGenreBlurOverlay = false,
 }: VideoCardProps) => {
   const [showMenu, setShowMenu] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -22,34 +28,99 @@ export const VideoCard = ({
   if (layout === 'list') {
     return (
       <div 
-        onClick={() => onSelectVideo(video)}
-        className="flex gap-3 sm:gap-4 p-2 rounded-xl hover:bg-[#272727]/50 cursor-pointer transition-colors group"
+        className="flex gap-4 sm:gap-6 p-3 rounded-2xl hover:bg-[#212121] cursor-pointer transition-colors group border border-transparent hover:border-white/10"
       >
-        {/* Thumbnail */}
-        <div className="relative w-40 sm:w-48 aspect-video rounded-xl overflow-hidden bg-[#212121] shrink-0">
-          <FadeImage
-            src={video.thumbnail}
-            alt={video.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            containerClassName="w-full h-full"
-          />
-          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tight bg-black/80 text-white z-10">
+        {/* Left: Card / Thumbnail Container */}
+        <div 
+          onClick={() => onSelectVideo(video)}
+          className="relative w-44 sm:w-56 md:w-64 aspect-video rounded-xl overflow-hidden bg-[#212121] shrink-0 shadow-md"
+        >
+          {isGenreCard && isGenreBlurOverlay ? (
+            <>
+              {/* Background blurred image */}
+              <div className="absolute inset-0 overflow-hidden">
+                <FadeImage
+                  src={video.thumbnail}
+                  alt={video.title}
+                  className="w-full h-full object-cover filter blur-lg scale-125 opacity-70"
+                  containerClassName="w-full h-full"
+                />
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-md" />
+              </div>
+
+              {/* Center Overlay: Poster Portrait with Blur BG */}
+              <div className="absolute inset-0 flex items-center justify-center p-1.5 z-10">
+                <div className="h-[92%] aspect-[2/3] rounded-lg overflow-hidden shadow-xl border border-white/20 bg-[#181818]">
+                  <FadeImage
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-full h-full object-cover"
+                    containerClassName="w-full h-full"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <FadeImage
+              src={video.thumbnail}
+              alt={video.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              containerClassName="w-full h-full"
+            />
+          )}
+
+          {/* Duration badge */}
+          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tight bg-black/80 text-white z-20">
             {video.duration}
           </div>
         </div>
 
-        {/* Video Info */}
-        <div className="flex-1 min-w-0 pr-2">
-          <h3 className="text-sm font-medium text-white line-clamp-2 leading-snug group-hover:text-blue-400 transition-colors">
-            {video.title}
-          </h3>
-          <p className="text-xs text-[#aaaaaa] mt-1 flex items-center gap-1 hover:text-white">
-            <span>{video.channel.name}</span>
-            {video.channel.isVerified && <VerifiedBadge className="w-3.5 h-3.5 shrink-0" />}
-          </p>
-          <p className="text-xs text-[#aaaaaa] mt-0.5">
-            {video.views} • {formatRelativeTime(video.uploadedAt)}
-          </p>
+        {/* Right: Video Info (YouTube result style) */}
+        <div 
+          onClick={() => {
+            if (onSelectInfo) {
+              onSelectInfo(video);
+            } else {
+              onSelectVideo(video);
+            }
+          }}
+          className="flex-1 min-w-0 py-1 flex flex-col justify-between"
+        >
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-white line-clamp-2 leading-snug group-hover:text-blue-400 transition-colors">
+              {video.title}
+            </h3>
+            <div className="flex items-center gap-2 mt-1 text-xs text-[#aaaaaa]">
+              <span>{video.views}</span>
+              <span>•</span>
+              <span>{formatRelativeTime(video.uploadedAt)}</span>
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-1.5">
+                <FadeImage
+                  src={video.channel.avatar}
+                  alt={video.channel.name}
+                  className="w-5 h-5 rounded-full object-cover"
+                  containerClassName="w-5 h-5 rounded-full"
+                />
+                <span className="text-xs text-gray-300 font-medium">{video.channel.name}</span>
+                {video.channel.isVerified && <VerifiedBadge className="w-3 h-3 shrink-0" />}
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed hidden sm:block">
+              {video.description}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#272727] text-gray-300 font-medium">
+              {video.category}
+            </span>
+            {video.tags && video.tags.slice(0, 3).map((tag, idx) => (
+              <span key={idx} className="text-[10px] px-2 py-0.5 rounded-full bg-[#212121] text-gray-400 hidden md:inline-block">
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -69,16 +140,43 @@ export const VideoCard = ({
         onClick={() => onSelectVideo(video)}
         className="relative aspect-video w-full rounded-2xl overflow-hidden bg-[#212121] shadow-lg"
       >
-        <FadeImage
-          src={video.thumbnail}
-          alt={video.title}
-          className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
-          containerClassName="w-full h-full"
-        />
+        {isGenreCard && isGenreBlurOverlay ? (
+          <>
+            {/* Background blurred image */}
+            <div className="absolute inset-0 overflow-hidden">
+              <FadeImage
+                src={video.thumbnail}
+                alt={video.title}
+                className="w-full h-full object-cover filter blur-xl scale-125 opacity-70"
+                containerClassName="w-full h-full"
+              />
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-md" />
+            </div>
+
+            {/* Center Overlay: Poster Portrait with Blur BG */}
+            <div className="absolute inset-0 flex items-center justify-center p-2 z-10">
+              <div className="h-[92%] aspect-[2/3] rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-[#181818] transform group-hover:scale-105 transition-transform duration-300">
+                <FadeImage
+                  src={video.thumbnail}
+                  alt={video.title}
+                  className="w-full h-full object-cover"
+                  containerClassName="w-full h-full"
+                />
+              </div>
+            </div>
+          </>
+        ) : (
+          <FadeImage
+            src={video.thumbnail}
+            alt={video.title}
+            className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
+            containerClassName="w-full h-full"
+          />
+        )}
 
         {/* Hover quick play action badge */}
         {isHovered && (
-          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20">
             <div className="w-12 h-12 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center text-white border border-white/20">
               <Play className="w-5 h-5 ml-0.5 fill-current text-white" />
             </div>
@@ -86,12 +184,12 @@ export const VideoCard = ({
         )}
 
         {/* Duration badge */}
-        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md text-xs font-semibold bg-black/85 text-white tracking-wide shadow-md z-10">
+        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md text-xs font-semibold bg-black/85 text-white tracking-wide shadow-md z-20">
           {video.duration}
         </div>
 
         {/* HLS .m3u8 indicator */}
-        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/70 backdrop-blur-sm text-gray-300 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/70 backdrop-blur-sm text-gray-300 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-20">
           .m3u8
         </div>
       </div>
@@ -116,8 +214,14 @@ export const VideoCard = ({
 
         {/* Title and Metadata */}
         <div 
-          onClick={() => onSelectVideo(video)}
-          className="flex-1 min-w-0 pr-6"
+          onClick={() => {
+            if (onSelectInfo) {
+              onSelectInfo(video);
+            } else {
+              onSelectVideo(video);
+            }
+          }}
+          className="flex-1 min-w-0 pr-6 cursor-pointer"
         >
           <h3 className="text-sm font-semibold text-[#f1f1f1] leading-tight line-clamp-2 group-hover:text-white transition-colors" title={video.title}>
             {video.title}

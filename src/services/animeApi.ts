@@ -1038,7 +1038,6 @@ export async function fetchAnimeByGenre(genre: string, page: number = 1): Promis
   const directUrl = `https://anikototvapi.vercel.app/api/genre/${encodeURIComponent(formattedGenre)}?page=${page}`;
 
   let json: any = await safeFetchJson(localProxy);
-
   if (!json || (!json.success && !json.results)) {
     json = await safeFetchJson(directUrl, {
       headers: { 'Accept': 'application/json' },

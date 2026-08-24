@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { FilterBar } from './components/FilterBar';
 import { VideoCard } from './components/VideoCard';
 import { VideoCardSkeleton } from './components/VideoCardSkeleton';
+import { GenreListSkeleton } from './components/GenreListSkeleton';
 import { WatchView } from './components/WatchView';
 import { AnimeHorizontalSlider } from './components/AnimeHorizontalSlider';
 import { AnimeCategoryView } from './components/AnimeCategoryView';
@@ -13,6 +14,7 @@ import { LandingPage } from './components/LandingPage';
 import { AvatarSetupModal } from './components/AvatarSetupModal';
 import { VoiceSearchModal } from './components/VoiceSearchModal';
 import { DeveloperPanel } from './components/DeveloperPanel';
+import { AnimeProfileModal } from './components/AnimeProfileModal';
 import { devLogger } from './services/devLogger';
 import { MOCK_VIDEOS, CATEGORIES } from './data/mockVideos';
 import { Video, ViewMode } from './types';
@@ -86,12 +88,35 @@ export default function App() {
 
   // Dynamic Genre Fetching & Cache
   const [genreVideosCache, setGenreVideosCache] = useState<Record<string, Video[]>>({});
+  const [genrePagination, setGenrePagination] = useState<Record<string, { page: number; totalPages: number; hasMore: boolean }>>({});
   const [isLoadingGenre, setIsLoadingGenre] = useState<boolean>(false);
+  const [isLoadingMoreGenre, setIsLoadingMoreGenre] = useState<boolean>(false);
 
   // Search State
   const [searchResults, setSearchResults] = useState<Video[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Anime Profile Modal State
+  const [profileVideo, setProfileVideo] = useState<Video | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+
+  // Genre Portrait Blur Overlay Setting State
+  const [isGenreBlurOverlay, setIsGenreBlurOverlay] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('anitube_genre_blur_overlay') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('anitube_genre_blur_overlay', String(isGenreBlurOverlay));
+    } catch (e) {
+      console.error('Failed to save genre blur overlay preference:', e);
+    }
+  }, [isGenreBlurOverlay]);
 
   // Sync Watch Later, Liked items & Watch History on mount and on storage events
   useEffect(() => {
@@ -145,40 +170,116 @@ export default function App() {
     }
   }, []);
 
-  // Fetch a specific page of recent anime
+  // Fetch a specific page of recent anime (copying genre loading logic for initial load: pages 1 & 2)
   const loadAnimePage = useCallback(async (pageToLoad: number, isInitial = false) => {
     if (isInitial) {
       setIsInitialLoading(true);
       setApiError(null);
-    } else {
-      setIsLoadingMore(true);
-    }
+      try {
+        const [res1, res2] = await Promise.allSettled([
+          fetchRecentAnime(1, 10),
+          fetchRecentAnime(2, 10),
+        ]);
 
-    try {
-      const response = await fetchRecentAnime(pageToLoad, 10);
-      
-      setApiVideos((prev) => {
-        const existingIds = new Set(isInitial ? [] : prev.map((v) => v.id));
-        const newUnique = response.videos.filter((v) => !existingIds.has(v.id));
-        return isInitial ? response.videos : [...prev, ...newUnique];
-      });
+        let combinedVideos: Video[] = [];
+        let maxTotalPages = 1;
+        let totalCount = 0;
 
-      setCurrentPage(response.pagination.page);
-      setTotalApiCount(response.pagination.total);
-      setHasMore(response.pagination.page < response.pagination.total_pages);
-      setApiError(null);
-    } catch (err) {
-      console.error('Error fetching recent anime from API:', err);
-      if (isInitial) {
+        if (res1.status === 'fulfilled' && res1.value && res1.value.videos) {
+          combinedVideos.push(...res1.value.videos);
+          maxTotalPages = Math.max(maxTotalPages, res1.value.pagination?.total_pages || 1);
+          totalCount = res1.value.pagination?.total || 0;
+        }
+        if (res2.status === 'fulfilled' && res2.value && res2.value.videos) {
+          combinedVideos.push(...res2.value.videos);
+          maxTotalPages = Math.max(maxTotalPages, res2.value.pagination?.total_pages || 1);
+          totalCount = Math.max(totalCount, res2.value.pagination?.total || 0);
+        }
+
+        const seen = new Set();
+        const uniqueVideos = combinedVideos.filter((v) => {
+          if (seen.has(v.id)) return false;
+          seen.add(v.id);
+          return true;
+        });
+
+        setApiVideos(uniqueVideos);
+        setCurrentPage(2);
+        setTotalApiCount(totalCount);
+        const inferredTotalPages = uniqueVideos.length >= 20 ? 3 : 2;
+        const effectiveTotalPages = Math.max(maxTotalPages, inferredTotalPages);
+        setHasMore(uniqueVideos.length > 0 && 2 < effectiveTotalPages);
+        setApiError(null);
+      } catch (err) {
+        console.error('Error fetching recent anime from API (initial):', err);
         setApiError('Unable to load live recent anime from primary API. Displaying high-definition catalogue.');
-      }
-    } finally {
-      if (isInitial) {
+      } finally {
         setIsInitialLoading(false);
       }
-      setIsLoadingMore(false);
+    } else {
+      setIsLoadingMore(true);
+      try {
+        const response = await fetchRecentAnime(pageToLoad, 10);
+        
+        setApiVideos((prev) => {
+          const existingIds = new Set(prev.map((v) => v.id));
+          const newUnique = response.videos.filter((v) => !existingIds.has(v.id));
+          return [...prev, ...newUnique];
+        });
+
+        setCurrentPage(response.pagination.page);
+        setTotalApiCount(response.pagination.total);
+        const apiTotalPages = response.pagination.total_pages || 1;
+        const inferredTotalPages = response.videos.length >= 10 ? pageToLoad + 1 : pageToLoad;
+        const effectiveTotalPages = Math.max(apiTotalPages, inferredTotalPages);
+        setHasMore(response.videos.length > 0 && pageToLoad < effectiveTotalPages);
+        setApiError(null);
+      } catch (err) {
+        console.error('Error fetching recent anime from API (more):', err);
+      } finally {
+        setIsLoadingMore(false);
+      }
     }
   }, []);
+
+  // Fetch next page of genre anime
+  const loadMoreGenre = useCallback(async () => {
+    if (selectedCategory === 'All' || isLoadingMoreGenre) return;
+    const catLower = selectedCategory.toLowerCase();
+    const pag = genrePagination[catLower] || { page: 2, totalPages: 10, hasMore: true };
+    if (!pag.hasMore) return;
+
+    const nextPage = pag.page + 1;
+    setIsLoadingMoreGenre(true);
+    try {
+      const fetched = await fetchAnimeByGenre(catLower, nextPage);
+      if (fetched && fetched.videos && fetched.videos.length > 0) {
+        setGenreVideosCache((prev) => {
+          const existing = prev[catLower] || [];
+          const existingIds = new Set(existing.map((v) => v.id));
+          const newUnique = fetched.videos.filter((v) => !existingIds.has(v.id));
+          return { ...prev, [catLower]: [...existing, ...newUnique] };
+        });
+        setGenrePagination((prev) => ({
+          ...prev,
+          [catLower]: {
+            page: nextPage,
+            totalPages: fetched.totalPages || pag.totalPages,
+            hasMore: nextPage < (fetched.totalPages || pag.totalPages),
+          },
+        }));
+      } else {
+        setGenrePagination((prev) => ({
+          ...prev,
+          [catLower]: { ...pag, hasMore: false },
+        }));
+      }
+    } catch (e) {
+      console.warn('Load more genre error:', e);
+    } finally {
+      setIsLoadingMoreGenre(false);
+    }
+  }, [selectedCategory, genrePagination, isLoadingMoreGenre]);
 
   // Perform search
   useEffect(() => {
@@ -216,19 +317,25 @@ export default function App() {
 
   // Lazy loading observer for pagination
   useEffect(() => {
-    if (activeView !== 'home' || isInitialLoading || isLoadingMore || !hasMore) {
-      return;
-    }
-
-    if (selectedCategory !== 'All' || searchQuery.trim() !== '') {
+    if (activeView !== 'home' || searchQuery.trim() !== '') {
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
-        if (first.isIntersecting && !isLoadingMore && hasMore) {
-          loadAnimePage(currentPage + 1, false);
+        if (first.isIntersecting) {
+          if (selectedCategory === 'All') {
+            if (!isLoadingMore && hasMore) {
+              loadAnimePage(currentPage + 1, false);
+            }
+          } else {
+            const catLower = selectedCategory.toLowerCase();
+            const pag = genrePagination[catLower] || { page: 2, totalPages: 10, hasMore: true };
+            if (!isLoadingMoreGenre && pag.hasMore) {
+              loadMoreGenre();
+            }
+          }
         }
       },
       {
@@ -248,7 +355,7 @@ export default function App() {
         observer.unobserve(currentSentinel);
       }
     };
-  }, [activeView, currentPage, hasMore, isInitialLoading, isLoadingMore, loadAnimePage, searchQuery, selectedCategory]);
+  }, [activeView, currentPage, hasMore, isLoadingMore, loadAnimePage, searchQuery, selectedCategory, genrePagination, isLoadingMoreGenre, loadMoreGenre]);
 
   // Effect to fetch genre catalogue when category is selected
   useEffect(() => {
@@ -259,9 +366,40 @@ export default function App() {
     async function loadGenre() {
       setIsLoadingGenre(true);
       try {
-        const fetched = await fetchAnimeByGenre(catLower);
-        if (fetched && fetched.videos && fetched.videos.length > 0) {
-          setGenreVideosCache((prev) => ({ ...prev, [catLower]: fetched.videos }));
+        const [res1, res2] = await Promise.allSettled([
+          fetchAnimeByGenre(catLower, 1),
+          fetchAnimeByGenre(catLower, 2),
+        ]);
+
+        let combinedVideos: Video[] = [];
+        let maxTotalPages = 1;
+
+        if (res1.status === 'fulfilled' && res1.value && res1.value.videos) {
+          combinedVideos.push(...res1.value.videos);
+          maxTotalPages = Math.max(maxTotalPages, res1.value.totalPages || 1);
+        }
+        if (res2.status === 'fulfilled' && res2.value && res2.value.videos) {
+          combinedVideos.push(...res2.value.videos);
+          maxTotalPages = Math.max(maxTotalPages, res2.value.totalPages || 1);
+        }
+
+        if (combinedVideos.length > 0) {
+          const seen = new Set();
+          const uniqueVideos = combinedVideos.filter((v) => {
+            if (seen.has(v.id)) return false;
+            seen.add(v.id);
+            return true;
+          });
+
+          setGenreVideosCache((prev) => ({ ...prev, [catLower]: uniqueVideos }));
+          setGenrePagination((prev) => ({
+            ...prev,
+            [catLower]: {
+              page: 2,
+              totalPages: maxTotalPages,
+              hasMore: 2 < maxTotalPages,
+            },
+          }));
         }
       } catch (e) {
         console.warn('Genre load error:', e);
@@ -412,6 +550,16 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleSelectVideoWithEpisode = (video: Video, episodeNum: number) => {
+    const updated = { ...video, episodeNumber: episodeNum, duration: `EP ${episodeNum}` };
+    setSelectedVideo(updated);
+    setActiveView('watch');
+    setIsSidebarOpen(false);
+    addToWatchHistory(updated);
+    setWatchHistoryItems(getWatchHistoryList());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleToggleSidebar = () => {
     setIsSidebarOpen((prev) => !prev);
   };
@@ -451,6 +599,8 @@ export default function App() {
               devLogger.setDevMode(next);
               setIsDevMode(next);
             }}
+            isGenreBlurOverlay={isGenreBlurOverlay}
+            onToggleGenreBlurOverlay={() => setIsGenreBlurOverlay((prev) => !prev)}
           />
 
           {/* Main Layout Area */}
@@ -840,12 +990,24 @@ export default function App() {
                 )}
 
                 {/* Loading Skeletons for Initial Load, Search, or Genre Switch */}
-                {isInitialLoading || isSearching || isGenreLoading ? (
+                {isInitialLoading || isSearching ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
                     {Array.from({ length: 8 }).map((_, i) => (
                       <VideoCardSkeleton
                         key={`skeleton-${i}`}
-                        label={searchQuery ? `Searching "${searchQuery}"...` : selectedCategory !== 'All' ? `Loading ${selectedCategory}...` : 'Loading AniTube...'}
+                        label={searchQuery ? `Searching "${searchQuery}"...` : 'Loading AniTube...'}
+                        delayMs={i * 60}
+                      />
+                    ))}
+                  </div>
+                ) : isGenreLoading && selectedCategory !== 'All' ? (
+                  <GenreListSkeleton />
+                ) : isGenreLoading ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <VideoCardSkeleton
+                        key={`skeleton-${i}`}
+                        label={`Loading ${selectedCategory}...`}
                         delayMs={i * 60}
                       />
                     ))}
@@ -871,14 +1033,37 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    {/* Search or Specific Genre: Render Single Grid */}
-                    {searchQuery || selectedCategory !== 'All' ? (
+                    {/* Search or Specific Genre */}
+                    {searchQuery ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
-                        {(searchQuery ? searchResults : filteredVideos).map((video) => (
+                        {searchResults.map((video) => (
                           <VideoCard
                             key={video.id}
                             video={video}
                             onSelectVideo={handleSelectVideo}
+                            onSelectInfo={(v) => {
+                              setProfileVideo(v);
+                              setIsProfileModalOpen(true);
+                            }}
+                            isGenreCard={false}
+                            isGenreBlurOverlay={isGenreBlurOverlay}
+                          />
+                        ))}
+                      </div>
+                    ) : selectedCategory !== 'All' ? (
+                      <div className="max-w-4xl mx-auto space-y-3">
+                        {filteredVideos.map((video) => (
+                          <VideoCard
+                            key={video.id}
+                            video={video}
+                            onSelectVideo={handleSelectVideo}
+                            onSelectInfo={(v) => {
+                              setProfileVideo(v);
+                              setIsProfileModalOpen(true);
+                            }}
+                            layout="list"
+                            isGenreCard={true}
+                            isGenreBlurOverlay={isGenreBlurOverlay}
                           />
                         ))}
                       </div>
@@ -896,6 +1081,12 @@ export default function App() {
                                     key={video.id}
                                     video={video}
                                     onSelectVideo={handleSelectVideo}
+                                    onSelectInfo={(v) => {
+                                      setProfileVideo(v);
+                                      setIsProfileModalOpen(true);
+                                    }}
+                                    isGenreCard={false}
+                                    isGenreBlurOverlay={isGenreBlurOverlay}
                                   />
                                 ))}
                               </div>
@@ -922,7 +1113,7 @@ export default function App() {
                     )}
 
                     {/* Additional Skeleton placeholders when lazy loading next page */}
-                    {isLoadingMore && (
+                    {(isLoadingMore || isLoadingMoreGenre) && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 mt-8">
                         {Array.from({ length: 4 }).map((_, i) => (
                           <VideoCardSkeleton
@@ -934,33 +1125,48 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Lazy loading sentinel trigger & Load More button */}
-                    {!searchQuery && selectedCategory === 'All' && (
+                    {/* Lazy loading sentinel trigger */}
+                    {!searchQuery && (
                       <div className="mt-12 flex flex-col items-center justify-center pb-8">
                         <div ref={loadMoreSentinelRef} className="h-10 w-full" />
 
-                        {hasMore ? (
-                          <button
-                            onClick={() => loadAnimePage(currentPage + 1, false)}
-                            disabled={isLoadingMore}
-                            className="px-6 py-2.5 rounded-full bg-[#272727] hover:bg-[#383838] active:scale-95 text-white text-xs font-semibold flex items-center gap-2 border border-[#383838] transition-all shadow-lg cursor-pointer"
-                          >
-                            {isLoadingMore ? (
-                              <>
+                        {selectedCategory === 'All' ? (
+                          hasMore ? (
+                            isLoadingMore ? (
+                              <div className="flex items-center gap-2 text-xs text-gray-400 py-4">
                                 <Loader2 className="w-4 h-4 animate-spin text-white" />
                                 <span>Loading page {currentPage + 1}...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="w-4 h-4 text-white" />
-                                <span>Load More Anime (Page {currentPage + 1})</span>
-                              </>
-                            )}
-                          </button>
+                              </div>
+                            ) : null
+                          ) : (
+                            <div className="text-xs text-gray-500 py-4">
+                              You have reached the end of recent anime updates.
+                            </div>
+                          )
                         ) : (
-                          <div className="text-xs text-gray-500 py-4">
-                            You have reached the end of recent anime updates.
-                          </div>
+                          (genrePagination[selectedCategory.toLowerCase()]?.hasMore ?? true) ? (
+                            <button
+                              onClick={loadMoreGenre}
+                              disabled={isLoadingMoreGenre}
+                              className="px-6 py-2.5 rounded-full bg-[#272727] hover:bg-[#383838] active:scale-95 text-white text-xs font-semibold flex items-center gap-2 border border-[#383838] transition-all shadow-lg cursor-pointer"
+                            >
+                              {isLoadingMoreGenre ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                                  <span>Loading more {selectedCategory}...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-4 h-4 text-white" />
+                                  <span>Load More {selectedCategory}</span>
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <div className="text-xs text-gray-500 py-4">
+                              You have reached the end of {selectedCategory} anime.
+                            </div>
+                          )
                         )}
                       </div>
                     )}
@@ -994,6 +1200,14 @@ export default function App() {
           setHasVisitedLanding(true);
           setShowLanding(false);
         }}
+      />
+
+      {/* Anime Studio / YouTuber Profile & Episodes Modal */}
+      <AnimeProfileModal
+        video={profileVideo}
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        onSelectVideoWithEpisode={handleSelectVideoWithEpisode}
       />
 
       {/* Developer Diagnostics Floating Panel */}

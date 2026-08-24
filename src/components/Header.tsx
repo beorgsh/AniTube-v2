@@ -9,7 +9,8 @@ import {
   Settings,
   HelpCircle,
   Moon,
-  Terminal
+  Terminal,
+  Layers
 } from 'lucide-react';
 
 import { UserProfile } from '../services/sessionStorage';
@@ -26,6 +27,8 @@ interface HeaderProps {
   onOpenAvatarModal?: () => void;
   isDevMode?: boolean;
   onToggleDevMode?: () => void;
+  isGenreBlurOverlay?: boolean;
+  onToggleGenreBlurOverlay?: () => void;
 }
 
 export const Header = ({
@@ -39,6 +42,8 @@ export const Header = ({
   onOpenAvatarModal,
   isDevMode = false,
   onToggleDevMode,
+  isGenreBlurOverlay = false,
+  onToggleGenreBlurOverlay,
 }: HeaderProps) => {
 
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -77,19 +82,22 @@ export const Header = ({
         <div 
           onClick={onLogoClick || onHomeClick}
           id="btn-brand-logo"
-          className="flex items-center gap-1.5 cursor-pointer group"
+          className="flex items-center gap-1.5 cursor-pointer group relative"
           title="AniTube Landing Page / Home"
         >
-          <div className="relative flex items-center justify-center w-8 h-6 rounded-md bg-[#ff0000] text-white group-hover:scale-105 transition-transform shadow-md shadow-red-900/30">
+          {/* YouTube style red rounded box with play triangle inside */}
+          <div className="relative flex items-center justify-center w-8 h-5.5 rounded-xl bg-[#ff0000] text-white group-hover:scale-105 transition-transform shadow-md shadow-red-900/30">
             {/* Play triangle */}
             <div className="w-0 h-0 border-t-[4px] border-t-transparent border-l-[7px] border-l-white border-b-[4px] border-b-transparent ml-0.5" />
           </div>
-          <div className="flex items-center">
-            <span className="text-[19px] font-black tracking-tighter text-white font-sans">
-              Ani<span className="text-[#ff0000]">Tube</span>
+          {/* AniTube text: Ani in white, Tube in white font, with anime badge positioned above right */}
+          <div className="relative flex items-center">
+            <span className="text-[19px] font-black tracking-tight text-white font-sans">
+              Ani<span className="text-white font-semibold">Tube</span>
             </span>
-            <span className="ml-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-[#222222] px-1 py-0.5 rounded">
-              ANIME
+            {/* Anime Badge positioned above right */}
+            <span className="absolute -top-2.5 -right-5 text-[9px] font-extrabold text-black bg-[#ffcc00] px-1 py-0.2 rounded-full shadow tracking-tighter">
+              anime
             </span>
           </div>
         </div>
@@ -309,6 +317,23 @@ export const Header = ({
                       <span>Developer Diagnostics</span>
                     </div>
                     <div className={`w-8 h-4 rounded-full transition-colors p-0.5 flex items-center ${isDevMode ? 'bg-emerald-500 justify-end' : 'bg-[#444] justify-start'}`}>
+                      <div className="w-3 h-3 rounded-full bg-white shadow-sm" />
+                    </div>
+                  </div>
+                )}
+                {onToggleGenreBlurOverlay && (
+                  <div 
+                    onClick={() => {
+                      onToggleGenreBlurOverlay();
+                    }}
+                    className="flex items-center justify-between px-4 py-2.5 hover:bg-[#2d2d2d] cursor-pointer text-purple-300 font-medium transition-colors border-t border-[#333]"
+                    title="Toggle genre cards blur background with centered portrait poster overlay"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Layers className="w-4 h-4 text-purple-400" />
+                      <span>Genre Portrait Blur Mode</span>
+                    </div>
+                    <div className={`w-8 h-4 rounded-full transition-colors p-0.5 flex items-center ${isGenreBlurOverlay ? 'bg-purple-500 justify-end' : 'bg-[#444] justify-start'}`}>
                       <div className="w-3 h-3 rounded-full bg-white shadow-sm" />
                     </div>
                   </div>
