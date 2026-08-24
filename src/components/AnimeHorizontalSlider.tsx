@@ -214,15 +214,6 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
                       {/* Gradient Overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
 
-                      {/* Top Badges */}
-                      <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 pointer-events-none">
-                        {video.episodeNumber ? (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-red-600 backdrop-blur-md text-white border border-red-500/50 shadow-sm">
-                            EP {video.episodeNumber}
-                          </span>
-                        ) : null}
-                      </div>
-
                       {/* Watch Duration / Timestamp Badge */}
                       {(video.currentTime || video.durationSeconds) && (
                         <div className="absolute bottom-2 right-2 z-10 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-mono text-white pointer-events-none backdrop-blur-xs">
@@ -250,9 +241,9 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
                     <div className="px-0.5 space-y-0.5">
                       <h3
                         className="text-xs sm:text-sm font-bold text-white line-clamp-1 leading-snug group-hover/card:text-red-400 transition-colors"
-                        title={video.title}
+                        title={video.title.replace(/:\s*EP\s*\d+/i, '').replace(/\s*-\s*Episode\s*\d+/i, '').replace(/\s*EP\s*\d+/i, '').trim()}
                       >
-                        {video.title}
+                        {video.title.replace(/:\s*EP\s*\d+/i, '').replace(/\s*-\s*Episode\s*\d+/i, '').replace(/\s*EP\s*\d+/i, '').trim()}
                       </h3>
                       <div className="flex items-center justify-between text-[11px] text-gray-400">
                         <span className="truncate">{video.category || 'Anime'}</span>
@@ -287,13 +278,9 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
 
                   {/* Top Badges (Type and Mic / CC icons) */}
                   <div className="relative z-10 p-2.5 flex items-start justify-between gap-1.5 pointer-events-none">
-                    {/* Left: EP Episode Number Badge or Anime Type Pill */}
+                    {/* Left: Anime Type Pill */}
                     <div className="flex items-center gap-1">
-                      {video.episodeNumber ? (
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-red-600 backdrop-blur-md text-white border border-red-500/50 shadow-sm">
-                          EP {video.episodeNumber}
-                        </span>
-                      ) : animeType ? (
+                      {animeType ? (
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-black/60 backdrop-blur-md text-amber-300 border border-white/10 shadow-sm">
                           {animeType}
                         </span>
@@ -332,12 +319,12 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
 
                   {/* Bottom Info Overlay */}
                   <div className="relative z-10 pt-16 pb-3 px-3 flex flex-col justify-end pointer-events-none space-y-1.5">
-                    {/* Title with Latest Episode number (e.g. One Piece: EP 1129) */}
+                    {/* Title */}
                     <h3 
                       className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2 drop-shadow-md group-hover/card:text-white" 
-                      title={video.title}
+                      title={video.title.replace(/:\s*EP\s*\d+/i, '').replace(/\s*-\s*Episode\s*\d+/i, '').replace(/\s*EP\s*\d+/i, '').trim()}
                     >
-                      {video.title}
+                      {video.title.replace(/:\s*EP\s*\d+/i, '').replace(/\s*-\s*Episode\s*\d+/i, '').replace(/\s*EP\s*\d+/i, '').trim()}
                     </h3>
 
                     {/* Bottom Metadata */}
