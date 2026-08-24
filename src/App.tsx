@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { FilterBar } from './components/FilterBar';
@@ -7,7 +7,7 @@ import { VideoCardSkeleton } from './components/VideoCardSkeleton';
 import { WatchView } from './components/WatchView';
 import { AnimeHorizontalSlider } from './components/AnimeHorizontalSlider';
 import { AnimeCategoryView } from './components/AnimeCategoryView';
-import { CustomStreamModal } from './components/CustomStreamModal';
+import { SavedListView } from './components/SavedListView';
 import { VoiceSearchModal } from './components/VoiceSearchModal';
 import { MOCK_VIDEOS, CATEGORIES } from './data/mockVideos';
 import { Video, ViewMode } from './types';
@@ -20,7 +20,12 @@ import {
   fetchCompletedAnime,
   fetchAnimeByGenre 
 } from './services/animeApi';
-import { History, Tv, RefreshCw, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { 
+  getWatchLaterList, 
+  getLikedEpisodesList, 
+  LikedEpisodeItem 
+} from './services/sessionStorage';
+import { History, Tv, RefreshCw, Loader2, Sparkles, AlertCircle, Clock, ThumbsUp, ChevronRight, Shuffle } from 'lucide-react';
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewMode>('home');
@@ -28,9 +33,12 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
-  const [isCustomStreamModalOpen, setIsCustomStreamModalOpen] = useState<boolean>(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
   const [customVideos, setCustomVideos] = useState<Video[]>([]);
+
+  // Watch Later and Liked Items State from Session Cookies
+  const [watchLaterItems, setWatchLaterItems] = useState<Video[]>([]);
+  const [likedItems, setLikedItems] = useState<LikedEpisodeItem[]>([]);
 
   // API Recent Anime State (Grid feed)
   const [apiVideos, setApiVideos] = useState<Video[]>([]);
@@ -57,6 +65,20 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<Video[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Sync Watch Later & Liked items on mount and on storage events
+  useEffect(() => {
+    setWatchLaterItems(getWatchLaterList());
+    setLikedItems(getLikedEpisodesList());
+
+    const handleStorageUpdate = () => {
+      setWatchLaterItems(getWatchLaterList());
+      setLikedItems(getLikedEpisodesList());
+    };
+
+    window.addEventListener('anitube_storage_update', handleStorageUpdate);
+    return () => window.removeEventListener('anitube_storage_update', handleStorageUpdate);
+  }, []);
 
   // Sentinel ref for infinite scroll / lazy loading
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -224,61 +246,129 @@ export default function App() {
     return [...customVideos, ...MOCK_VIDEOS];
   }, [customVideos, apiVideos, popularVideos]);
 
-  // Dynamic categories computed from loaded anime and default tags
+  // Strictly pure anime genres only (no studios, no channels, no non-genre tags)
   const dynamicCategories = useMemo(() => {
-    const genreSet = new Set<string>();
-    apiVideos.forEach((v) => {
-      if (v.category && v.category !== 'Anime') genreSet.add(v.category);
-      v.tags.forEach((tag) => {
-        if (tag.length < 18 && !tag.includes('http')) genreSet.add(tag);
-      });
-    });
-
-    const combined = ['All', ...Array.from(genreSet).slice(0, 10), ...CATEGORIES.filter((c) => c !== 'All')];
-    return Array.from(new Set(combined));
-  }, [apiVideos]);
+    return CATEGORIES;
+  }, []);
 
   // Filtered video list based on category, dynamic genre API results, and search query
   const filteredVideos = useMemo(() => {
+    if (selectedCategory === 'All') {
+      return allVideos;
+    }
     const catLower = selectedCategory.toLowerCase();
-    const genreList = selectedCategory !== 'All' ? (genreVideosCache[catLower] || []) : [];
-    const sourceList = genreList.length > 0 ? [...genreList, ...allVideos] : allVideos;
+    const genreList = genreVideosCache[catLower] || [];
+    if (genreList.length > 0) {
+      return genreList;
+    }
 
-    // Deduplicate by ID
-    const seen = new Set<string>();
-    const uniqueSource = sourceList.filter((v) => {
-      if (seen.has(v.id)) return false;
-      seen.add(v.id);
-      return true;
+    // Fallback search in allVideos
+    return allVideos.filter((video) => {
+      return (
+        video.category.toLowerCase() === catLower ||
+        video.tags.some((t) => t.toLowerCase() === catLower)
+      );
     });
+  }, [allVideos, selectedCategory, genreVideosCache]);
 
-    return uniqueSource.filter((video) => {
-      const matchesSearch =
-        !searchQuery ||
-        video.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        video.channel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        video.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        video.description.toLowerCase().includes(searchQuery.toLowerCase());
+  const isGenreLoading = selectedCategory !== 'All' && (isLoadingGenre || !genreVideosCache[selectedCategory.toLowerCase()]);
 
-      const matchesCategory =
-        selectedCategory === 'All' ||
-        video.category.toLowerCase() === selectedCategory.toLowerCase() ||
-        video.tags.some((t) => t.toLowerCase() === selectedCategory.toLowerCase());
+  // Available Category Reels
+  const availableReels = useMemo(() => {
+    return [
+      {
+        id: 'popular',
+        title: 'Popular & Trending Anime',
+        subtitle: 'Top rated anime series streaming worldwide',
+        icon: 'flame' as const,
+        videos: popularVideos,
+        view: 'popular' as ViewMode,
+      },
+      {
+        id: 'ongoing',
+        title: 'Currently Airing & Ongoing Anime',
+        subtitle: 'Simulcast episodes airing every week',
+        icon: 'tv' as const,
+        videos: ongoingVideos,
+        view: 'ongoing' as ViewMode,
+      },
+      {
+        id: 'latest',
+        title: 'Latest Episode Releases',
+        subtitle: 'Newly released anime episodes with sub & dub',
+        icon: 'zap' as const,
+        videos: latestVideos,
+        view: 'latest' as ViewMode,
+      },
+      {
+        id: 'upcoming',
+        title: 'Upcoming Anime Releases',
+        subtitle: 'Anticipated seasons and anime premieres',
+        icon: 'calendar' as const,
+        videos: upcomingVideos,
+        view: 'upcoming' as ViewMode,
+      },
+      {
+        id: 'completed',
+        title: 'Completed Anime Series',
+        subtitle: 'Complete anime collections ready to binge',
+        icon: 'trophy' as const,
+        videos: completedVideos,
+        view: 'completed' as ViewMode,
+      },
+    ].filter((r) => r.videos.length > 0);
+  }, [popularVideos, ongoingVideos, latestVideos, upcomingVideos, completedVideos]);
 
-      return matchesSearch && matchesCategory;
+  // Reel Order Sequence (can be randomized or ordered)
+  const [reelSequence, setReelSequence] = useState<string[]>([
+    'popular',
+    'ongoing',
+    'latest',
+    'upcoming',
+    'completed',
+  ]);
+
+  // Shuffle / Randomize category reel sequence
+  const randomizeReels = useCallback(() => {
+    setReelSequence((prev) => {
+      const copy = [...prev];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
     });
-  }, [allVideos, searchQuery, selectedCategory, genreVideosCache]);
+  }, []);
+
+  // Ordered list of active reels based on current reel sequence
+  const orderedReels = useMemo(() => {
+    const map = new Map(availableReels.map((r) => [r.id, r]));
+    const result: typeof availableReels = [];
+    reelSequence.forEach((id) => {
+      const found = map.get(id);
+      if (found) {
+        result.push(found);
+        map.delete(id);
+      }
+    });
+    map.forEach((val) => result.push(val));
+    return result;
+  }, [availableReels, reelSequence]);
+
+  // Batch videos per loaded page (10 per page) for interleaving category reels
+  const videoBatches = useMemo(() => {
+    const batchSize = 10;
+    const batches: Video[][] = [];
+    for (let i = 0; i < filteredVideos.length; i += batchSize) {
+      batches.push(filteredVideos.slice(i, i + batchSize));
+    }
+    return batches;
+  }, [filteredVideos]);
 
   const handleSelectVideo = (video: Video) => {
     setSelectedVideo(video);
     setActiveView('watch');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handlePlayCustomStream = (video: Video) => {
-    setCustomVideos([video, ...customVideos]);
-    setSelectedVideo(video);
-    setActiveView('watch');
   };
 
   const handleToggleSidebar = () => {
@@ -299,7 +389,6 @@ export default function App() {
         onToggleSidebar={handleToggleSidebar}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onOpenCustomStreamModal={() => setIsCustomStreamModalOpen(true)}
         onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
         onHomeClick={handleHomeClick}
       />
@@ -321,6 +410,7 @@ export default function App() {
             setActiveView('home');
             setSelectedVideo(null);
           }}
+          onClose={() => setIsSidebarOpen(false)}
           selectedCategory={selectedCategory}
           isWatchPage={activeView === 'watch'}
         />
@@ -428,6 +518,30 @@ export default function App() {
             </div>
           )}
 
+          {/* Watch Later Dedicated View */}
+          {activeView === 'watch_later' && (
+            <SavedListView
+              type="watch_later"
+              watchLaterItems={watchLaterItems}
+              likedItems={likedItems}
+              onSelectVideo={handleSelectVideo}
+              onBackToHome={handleHomeClick}
+              onRefresh={() => setWatchLaterItems(getWatchLaterList())}
+            />
+          )}
+
+          {/* Liked Episodes Dedicated View */}
+          {activeView === 'liked' && (
+            <SavedListView
+              type="liked"
+              watchLaterItems={watchLaterItems}
+              likedItems={likedItems}
+              onSelectVideo={handleSelectVideo}
+              onBackToHome={handleHomeClick}
+              onRefresh={() => setLikedItems(getLikedEpisodesList())}
+            />
+          )}
+
           {/* History View */}
           {activeView === 'history' && (
             <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
@@ -460,7 +574,44 @@ export default function App() {
                 />
                 <div>
                   <h1 className="text-2xl font-bold text-white">Otaku Explorer</h1>
-                  <p className="text-xs text-gray-400">@anitube_user • {allVideos.length} anime cataloged</p>
+                  <p className="text-xs text-gray-400">@anitube_user • {watchLaterItems.length} Watch Later • {likedItems.length} Liked Episodes</p>
+                </div>
+              </div>
+
+              {/* Quick Playlists: Watch Later & Liked */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Watch Later Card */}
+                <div
+                  onClick={() => setActiveView('watch_later')}
+                  className="p-5 rounded-2xl bg-[#181818] border border-[#272727] hover:border-[#444] transition-all cursor-pointer flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-950/40 border border-blue-800/40 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
+                      <Clock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">Watch Later</h3>
+                      <p className="text-xs text-gray-400">{watchLaterItems.length} anime saved</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+                </div>
+
+                {/* Liked Episodes Card */}
+                <div
+                  onClick={() => setActiveView('liked')}
+                  className="p-5 rounded-2xl bg-[#181818] border border-[#272727] hover:border-[#444] transition-all cursor-pointer flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-red-950/40 border border-red-800/40 flex items-center justify-center text-red-400 group-hover:scale-105 transition-transform">
+                      <ThumbsUp className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">Liked Episodes</h3>
+                      <p className="text-xs text-gray-400">{likedItems.length} episodes liked</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
                 </div>
               </div>
 
@@ -512,17 +663,28 @@ export default function App() {
                         Live Anikoto Anime Hub ({apiVideos.length + popularVideos.length} loaded of {totalApiCount > 0 ? totalApiCount.toLocaleString() : '8,900+'})
                       </span>
                     </div>
-                    <button
-                      onClick={() => {
-                        loadAnimePage(1, true);
-                        loadAllCategories();
-                      }}
-                      className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors cursor-pointer"
-                      title="Refresh all anime feeds from API"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Refresh Feeds</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={randomizeReels}
+                        className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors cursor-pointer"
+                        title="Randomize and shuffle category reels order"
+                      >
+                        <Shuffle className="w-3.5 h-3.5 text-white" />
+                        <span>Randomize Reels</span>
+                      </button>
+                      <span className="text-gray-600">|</span>
+                      <button
+                        onClick={() => {
+                          loadAnimePage(1, true);
+                          loadAllCategories();
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-gray-300 hover:text-white transition-colors cursor-pointer"
+                        title="Refresh all anime feeds from API"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-white" />
+                        <span>Refresh Feeds</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -530,7 +692,7 @@ export default function App() {
                 {apiError && (
                   <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/40 text-xs text-amber-300 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <AlertCircle className="w-4 h-4 shrink-0 text-white" />
                       <span>{apiError}</span>
                     </div>
                     <button
@@ -538,81 +700,53 @@ export default function App() {
                         loadAnimePage(1, true);
                         loadAllCategories();
                       }}
-                      className="px-2.5 py-1 rounded-lg bg-amber-900/50 hover:bg-amber-800 text-amber-200 text-[11px] font-semibold cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg bg-amber-900/50 hover:bg-amber-800 text-white text-[11px] font-semibold cursor-pointer"
                     >
                       Retry API
                     </button>
                   </div>
                 )}
 
-                {/* Search / Filter status header */}
+                {/* Search status header */}
                 {searchQuery && (
-                  <div className="text-sm text-gray-400">
-                    Results for <span className="text-white font-semibold">"{searchQuery}"</span> ({searchResults.length} anime found)
+                  <div className="text-sm text-gray-400 pb-1">
+                    Results for <span className="text-white font-semibold">"{searchQuery}"</span> {!isSearching && `(${searchResults.length} anime found)`}
                   </div>
                 )}
 
-                {/* 1. HORIZONTAL SLIDE: POPULAR & TRENDING ANIME */}
-                {!searchQuery && selectedCategory === 'All' && popularVideos.length > 0 && (
-                  <AnimeHorizontalSlider
-                    title="Popular & Trending Anime"
-                    subtitle="Top rated anime series streaming worldwide"
-                    icon="flame"
-                    videos={popularVideos}
-                    onSelectVideo={handleSelectVideo}
-                    onViewAll={() => setActiveView('popular')}
-                    isLoading={isCategoriesLoading}
-                  />
+                {/* Genre status header when category selected */}
+                {!searchQuery && selectedCategory !== 'All' && (
+                  <div className="flex items-center justify-between pb-3 border-b border-[#252525]">
+                    <div>
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span>Genre: {selectedCategory}</span>
+                        {!isGenreLoading && (
+                          <span className="text-xs font-normal px-2.5 py-0.5 rounded-full bg-[#272727] text-gray-300">
+                            {filteredVideos.length} anime
+                          </span>
+                        )}
+                      </h2>
+                      <p className="text-xs text-gray-400 mt-0.5">Top-rated anime matching {selectedCategory}</p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCategory('All')}
+                      className="text-xs px-3 py-1.5 rounded-full bg-[#272727] text-gray-300 hover:text-white hover:bg-[#383838] transition-colors cursor-pointer"
+                    >
+                      Clear filter
+                    </button>
+                  </div>
                 )}
 
-                {/* 2. HORIZONTAL SLIDE: LATEST EPISODES */}
-                {!searchQuery && selectedCategory === 'All' && latestVideos.length > 0 && (
+                {/* Top Reel (Reel #0 from current sequence, e.g. Popular or randomized) */}
+                {!searchQuery && selectedCategory === 'All' && orderedReels.length > 0 && (
                   <AnimeHorizontalSlider
-                    title="Latest Episode Releases"
-                    subtitle="Newly released anime episodes with sub & dub"
-                    icon="zap"
-                    videos={latestVideos}
+                    key={orderedReels[0].id}
+                    title={orderedReels[0].title}
+                    subtitle={orderedReels[0].subtitle}
+                    icon={orderedReels[0].icon}
+                    videos={orderedReels[0].videos}
                     onSelectVideo={handleSelectVideo}
-                    onViewAll={() => setActiveView('latest')}
-                    isLoading={isCategoriesLoading}
-                  />
-                )}
-
-                {/* 3. HORIZONTAL SLIDE: ONGOING ANIME */}
-                {!searchQuery && selectedCategory === 'All' && ongoingVideos.length > 0 && (
-                  <AnimeHorizontalSlider
-                    title="Currently Airing & Ongoing Anime"
-                    subtitle="Simulcast episodes airing every week"
-                    icon="tv"
-                    videos={ongoingVideos}
-                    onSelectVideo={handleSelectVideo}
-                    onViewAll={() => setActiveView('ongoing')}
-                    isLoading={isCategoriesLoading}
-                  />
-                )}
-
-                {/* 4. HORIZONTAL SLIDE: UPCOMING ANIME */}
-                {!searchQuery && selectedCategory === 'All' && upcomingVideos.length > 0 && (
-                  <AnimeHorizontalSlider
-                    title="Upcoming Anime Releases"
-                    subtitle="Anticipated seasons and anime premieres"
-                    icon="calendar"
-                    videos={upcomingVideos}
-                    onSelectVideo={handleSelectVideo}
-                    onViewAll={() => setActiveView('upcoming')}
-                    isLoading={isCategoriesLoading}
-                  />
-                )}
-
-                {/* 5. HORIZONTAL SLIDE: COMPLETED ANIME */}
-                {!searchQuery && selectedCategory === 'All' && completedVideos.length > 0 && (
-                  <AnimeHorizontalSlider
-                    title="Completed Anime Series"
-                    subtitle="Complete anime collections ready to binge"
-                    icon="trophy"
-                    videos={completedVideos}
-                    onSelectVideo={handleSelectVideo}
-                    onViewAll={() => setActiveView('completed')}
+                    onViewAll={() => setActiveView(orderedReels[0].view)}
                     isLoading={isCategoriesLoading}
                   />
                 )}
@@ -620,17 +754,27 @@ export default function App() {
                 {/* Main Video Grid Feed Header */}
                 {!searchQuery && selectedCategory === 'All' && (
                   <div className="pt-6 border-t border-[#222222]">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Sparkles className="w-5 h-5 text-red-500" />
-                      <h2 className="text-lg font-bold text-white">
-                        Recent Anime Catalogue & Updates
-                      </h2>
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-white" />
+                        <h2 className="text-lg font-bold text-white">
+                          Recent Anime Catalogue & Updates
+                        </h2>
+                      </div>
+                      <button
+                        onClick={randomizeReels}
+                        title="Randomize category reels order"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2c2c2c] active:scale-95 text-xs text-gray-300 hover:text-white border border-[#333333] transition-all cursor-pointer shadow-sm"
+                      >
+                        <Shuffle className="w-3.5 h-3.5 text-white" />
+                        <span className="text-[11px] font-medium">Randomize Reels</span>
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* Initial Loading Skeletons */}
-                {isInitialLoading || isSearching ? (
+                {/* Loading Skeletons for Initial Load, Search, or Genre Switch */}
+                {isInitialLoading || isSearching || isGenreLoading ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
                     {Array.from({ length: 8 }).map((_, i) => (
                       <VideoCardSkeleton key={`skeleton-${i}`} />
@@ -638,12 +782,12 @@ export default function App() {
                   </div>
                 ) : (searchQuery ? searchResults.length === 0 : filteredVideos.length === 0) ? (
                   <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="w-16 h-16 rounded-full bg-[#272727] flex items-center justify-center text-gray-400 mb-4">
-                      <Tv className="w-8 h-8" />
+                    <div className="w-16 h-16 rounded-full bg-[#272727] flex items-center justify-center text-white mb-4">
+                      <Tv className="w-8 h-8 text-white" />
                     </div>
                     <h3 className="text-lg font-bold text-white">No anime found</h3>
                     <p className="text-xs text-gray-400 mt-1 max-w-sm">
-                      {searchError || 'Try searching with different keywords or switch back to the "All" category filter.'}
+                      {searchError || (searchQuery ? 'No results matched your search keywords.' : `No anime found matching genre "${selectedCategory}".`)}
                     </p>
                     <button
                       onClick={() => {
@@ -657,16 +801,55 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    {/* Grid of Anime Cards with Real Posters */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
-                      {(searchQuery ? searchResults : filteredVideos).map((video) => (
-                        <VideoCard
-                          key={video.id}
-                          video={video}
-                          onSelectVideo={handleSelectVideo}
-                        />
-                      ))}
-                    </div>
+                    {/* Search or Specific Genre: Render Single Grid */}
+                    {searchQuery || selectedCategory !== 'All' ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+                        {(searchQuery ? searchResults : filteredVideos).map((video) => (
+                          <VideoCard
+                            key={video.id}
+                            video={video}
+                            onSelectVideo={handleSelectVideo}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      /* Home Feed: Interleave Category Reels between page batches as pages load */
+                      <div className="space-y-8">
+                        {videoBatches.map((batch, batchIdx) => {
+                          const nextReel = orderedReels[batchIdx + 1];
+                          return (
+                            <Fragment key={`feed-batch-${batchIdx}`}>
+                              {/* Grid of Anime Cards for this Page Batch */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+                                {batch.map((video) => (
+                                  <VideoCard
+                                    key={video.id}
+                                    video={video}
+                                    onSelectVideo={handleSelectVideo}
+                                  />
+                                ))}
+                              </div>
+
+                              {/* Category Reel appearing dynamically after this page batch (e.g. Ongoing on Page 2, Upcoming on Page 3, Completed on Page 4) */}
+                              {nextReel && (
+                                <div className="pt-2">
+                                  <AnimeHorizontalSlider
+                                    key={nextReel.id}
+                                    title={nextReel.title}
+                                    subtitle={nextReel.subtitle}
+                                    icon={nextReel.icon}
+                                    videos={nextReel.videos}
+                                    onSelectVideo={handleSelectVideo}
+                                    onViewAll={() => setActiveView(nextReel.view)}
+                                    isLoading={isCategoriesLoading}
+                                  />
+                                </div>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Additional Skeleton placeholders when lazy loading next page */}
                     {isLoadingMore && (
@@ -690,12 +873,12 @@ export default function App() {
                           >
                             {isLoadingMore ? (
                               <>
-                                <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+                                <Loader2 className="w-4 h-4 animate-spin text-white" />
                                 <span>Loading page {currentPage + 1}...</span>
                               </>
                             ) : (
                               <>
-                                <Sparkles className="w-4 h-4 text-red-500" />
+                                <Sparkles className="w-4 h-4 text-white" />
                                 <span>Load More Anime (Page {currentPage + 1})</span>
                               </>
                             )}
@@ -714,13 +897,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      {/* Custom Stream / API Modal */}
-      <CustomStreamModal
-        isOpen={isCustomStreamModalOpen}
-        onClose={() => setIsCustomStreamModalOpen(false)}
-        onPlayCustomStream={handlePlayCustomStream}
-      />
 
       {/* Voice Search Modal */}
       <VoiceSearchModal

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { MoreVertical, CheckCircle2, Clock, ListPlus, Share2, Ban, Flag, Play } from 'lucide-react';
+import { MoreVertical, Clock, ListPlus, Share2, Ban, Flag, Play } from 'lucide-react';
 import { Video } from '../types';
 import { formatRelativeTime } from '../services/timeUtils';
+import { FadeImage, VerifiedBadge } from './FadeImage';
 
 export interface VideoCardProps {
   video: Video;
@@ -26,18 +27,17 @@ export const VideoCard = ({
       >
         {/* Thumbnail */}
         <div className="relative w-40 sm:w-48 aspect-video rounded-xl overflow-hidden bg-[#212121] shrink-0">
-          <img
+          <FadeImage
             src={video.thumbnail}
             alt={video.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-            referrerPolicy="no-referrer"
+            containerClassName="w-full h-full"
           />
-          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tight bg-black/80 text-white">
+          <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tight bg-black/80 text-white z-10">
             {video.duration}
           </div>
           {video.isLive && (
-            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-[#cc0000] text-white uppercase flex items-center gap-1">
+            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-[#cc0000] text-white uppercase flex items-center gap-1 z-10">
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
               LIVE
             </div>
@@ -51,9 +51,7 @@ export const VideoCard = ({
           </h3>
           <p className="text-xs text-[#aaaaaa] mt-1 flex items-center gap-1 hover:text-white">
             <span>{video.channel.name}</span>
-            {video.channel.isVerified && (
-              <CheckCircle2 className="w-3.5 h-3.5 text-gray-400 fill-current" />
-            )}
+            {video.channel.isVerified && <VerifiedBadge className="w-3.5 h-3.5 shrink-0" />}
           </p>
           <p className="text-xs text-[#aaaaaa] mt-0.5">
             {video.views} • {formatRelativeTime(video.uploadedAt)}
@@ -77,17 +75,16 @@ export const VideoCard = ({
         onClick={() => onSelectVideo(video)}
         className="relative aspect-video w-full rounded-2xl overflow-hidden bg-[#212121] shadow-lg"
       >
-        <img
+        <FadeImage
           src={video.thumbnail}
           alt={video.title}
           className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-105 transition-all duration-300"
-          loading="lazy"
-          referrerPolicy="no-referrer"
+          containerClassName="w-full h-full"
         />
 
         {/* Hover quick play action badge */}
         {isHovered && (
-          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
             <div className="w-12 h-12 rounded-full bg-black/70 backdrop-blur-md flex items-center justify-center text-white border border-white/20">
               <Play className="w-5 h-5 ml-0.5 fill-current text-white" />
             </div>
@@ -96,18 +93,18 @@ export const VideoCard = ({
 
         {/* Duration badge or LIVE badge */}
         {video.isLive ? (
-          <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[11px] font-bold bg-[#cc0000] text-white flex items-center gap-1.5 shadow-md">
+          <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[11px] font-bold bg-[#cc0000] text-white flex items-center gap-1.5 shadow-md z-10">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             LIVE
           </div>
         ) : (
-          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md text-xs font-semibold bg-black/85 text-white tracking-wide shadow-md">
+          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md text-xs font-semibold bg-black/85 text-white tracking-wide shadow-md z-10">
             {video.duration}
           </div>
         )}
 
         {/* HLS .m3u8 indicator */}
-        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/70 backdrop-blur-sm text-gray-300 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/70 backdrop-blur-sm text-gray-300 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           .m3u8
         </div>
       </div>
@@ -122,11 +119,11 @@ export const VideoCard = ({
           }}
           className="shrink-0"
         >
-          <img
+          <FadeImage
             src={video.channel.avatar}
             alt={video.channel.name}
             className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10 hover:ring-white/30 transition-all"
-            referrerPolicy="no-referrer"
+            containerClassName="w-9 h-9 rounded-full"
           />
         </div>
 
@@ -142,9 +139,7 @@ export const VideoCard = ({
           <div className="text-xs text-[#aaaaaa] mt-1 space-y-0.5">
             <div className="flex items-center gap-1 hover:text-white transition-colors">
               <span className="truncate">{video.channel.name}</span>
-              {video.channel.isVerified && (
-                <CheckCircle2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              )}
+              {video.channel.isVerified && <VerifiedBadge className="w-3.5 h-3.5 shrink-0" />}
             </div>
 
             <div>

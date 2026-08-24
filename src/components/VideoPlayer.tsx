@@ -50,11 +50,26 @@ export const VideoPlayer = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [showStreamInfo, setShowStreamInfo] = useState(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
+  const [isPlaybackReady, setIsPlaybackReady] = useState(false);
 
   // Keep onEnded ref in sync without triggering effects
   useEffect(() => {
     onEndedRef.current = onEnded;
   }, [onEnded]);
+
+  // Immediately pause and stop background audio when streamUrl is cleared or loading
+  useEffect(() => {
+    if (!streamUrl || isLoadingStream) {
+      setIsPlaybackReady(false);
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        try {
+          playerRef.current.pause();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [streamUrl, isLoadingStream]);
 
   // Determine if currently within intro or outro intervals
   const isIntroActive =
@@ -134,7 +149,22 @@ export const VideoPlayer = ({
 
   // Initialize or update player ONLY when streamUrl changes
   useEffect(() => {
-    if (!videoContainerRef.current || !streamUrl) return;
+    if (!videoContainerRef.current) return;
+
+    if (!streamUrl) {
+      setIsPlaybackReady(false);
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        try {
+          playerRef.current.pause();
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
+
+    // Reset playback ready on new stream URL
+    setIsPlaybackReady(false);
 
     // If streamUrl has not changed and player already exists, do not reload
     if (playerRef.current && lastStreamUrlRef.current === streamUrl) {
@@ -152,6 +182,7 @@ export const VideoPlayer = ({
       setErrorMessage('');
 
       try {
+        player.pause();
         player.src({
           src: streamUrl,
           type: mediaType,
@@ -220,9 +251,21 @@ export const VideoPlayer = ({
       }
     ));
 
+    player.on('playing', () => {
+      setIsPlaybackReady(true);
+    });
+
+    player.on('loadstart', () => {
+      setIsPlaybackReady(false);
+    });
+
     player.on('timeupdate', () => {
       try {
-        setCurrentTime(player.currentTime() || 0);
+        const time = player.currentTime() || 0;
+        setCurrentTime(time);
+        if (time > 0.05) {
+          setIsPlaybackReady(true);
+        }
       } catch {
         // ignore
       }
@@ -231,6 +274,7 @@ export const VideoPlayer = ({
     player.on('error', () => {
       const err = player.error();
       console.warn('VideoJS stream error:', err);
+      setIsPlaybackReady(false);
       setHasError(true);
       setErrorMessage(
         err?.message || 'Streaming playback error. Check HLS stream or CORS proxy.'
@@ -265,6 +309,42 @@ export const VideoPlayer = ({
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl group border border-[#272727]">
       {/* VideoJS Container */}
       <div data-vjs-player ref={videoContainerRef} className="w-full h-full" />
+
+      {/* Episode Thumbnail / Anime Fanart Banner Backdrop & Smooth Fade Overlay */}
+      <div
+        className={`absolute inset-0 z-15 bg-black overflow-hidden flex items-center justify-center transition-opacity duration-700 ease-out ${
+          isPlaybackReady && !isLoadingStream && streamUrl && !hasError
+            ? 'opacity-0 pointer-events-none'
+            : 'opacity-100 pointer-events-auto'
+        }`}
+      >
+        {poster && (
+          <img
+            src={poster}
+            alt={title || `Episode ${episode}`}
+            className="w-full h-full object-cover select-none filter brightness-90 transform scale-105"
+            referrerPolicy="no-referrer"
+          />
+        )}
+
+        {/* Ambient dark gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/70" />
+
+        {/* Loading Spinner & Episode Info Indicator */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center space-y-3 z-20">
+          <div className="w-12 h-12 rounded-full border-3 border-white/20 border-t-white animate-spin shadow-2xl" />
+          <div className="space-y-1">
+            <p className="text-white font-bold text-sm sm:text-base drop-shadow-md">
+              {isLoadingStream ? `Loading Episode ${episode}...` : `Buffering Episode ${episode}...`}
+            </p>
+            {servers[activeServerIndex] && (
+              <p className="text-gray-300 text-xs drop-shadow">
+                {servers[activeServerIndex].serverName}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Skip Intro Button Overlay */}
       {isIntroActive && (

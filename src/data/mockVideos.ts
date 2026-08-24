@@ -184,18 +184,34 @@ export const MOCK_SHORTS = [
   }
 ];
 
-export const CATEGORIES = [
-  'All',
+export const VALID_ANIME_GENRES = [
   'Action',
   'Adventure',
-  'Fantasy',
-  'Shounen',
-  'Super Power',
   'Comedy',
   'Drama',
-  'Sci-Fi',
+  'Fantasy',
+  'Horror',
+  'Isekai',
+  'Martial Arts',
+  'Mecha',
+  'Music',
   'Mystery',
-  'Supernatural',
+  'Psychological',
   'Romance',
-  'Slice of Life'
+  'Sci-Fi',
+  'Seinen',
+  'Shoujo',
+  'Shounen',
+  'Slice of Life',
+  'Sports',
+  'Supernatural',
+  'Super Power',
+  'Suspense',
+  'Thriller',
+  'Ecchi'
+];
+
+export const CATEGORIES = [
+  'All',
+  ...VALID_ANIME_GENRES
 ];

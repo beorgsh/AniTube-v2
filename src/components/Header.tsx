@@ -1,21 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { 
   Menu, 
   Search, 
   Mic, 
   Bell, 
-  Video as VideoIcon, 
-  Plus, 
   X, 
-  Sparkles, 
-  SlidersHorizontal,
-  Flame,
-  Film,
   User,
   Settings,
   HelpCircle,
-  Moon,
-  LogOut
+  Moon
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -23,7 +16,6 @@ interface HeaderProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onSelectVideoById?: (id: string) => void;
-  onOpenCustomStreamModal: () => void;
   onOpenVoiceModal: () => void;
   onHomeClick: () => void;
 }
@@ -32,7 +24,6 @@ export const Header = ({
   onToggleSidebar,
   searchQuery,
   onSearchChange,
-  onOpenCustomStreamModal,
   onOpenVoiceModal,
   onHomeClick
 }: HeaderProps) => {
@@ -78,7 +69,6 @@ export const Header = ({
           <div className="relative flex items-center justify-center w-8 h-6 rounded-md bg-[#ff0000] text-white group-hover:scale-105 transition-transform shadow-md shadow-red-900/30">
             {/* Play triangle */}
             <div className="w-0 h-0 border-t-[4px] border-t-transparent border-l-[7px] border-l-white border-b-[4px] border-b-transparent ml-0.5" />
-            <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white animate-ping opacity-75" />
           </div>
           <div className="flex items-center">
             <span className="text-[19px] font-black tracking-tighter text-white font-sans">
@@ -183,17 +173,6 @@ export const Header = ({
           aria-label="Open search"
         >
           <Search className="w-5 h-5" />
-        </button>
-
-        {/* Custom Stream / API Source Button */}
-        <button
-          onClick={onOpenCustomStreamModal}
-          id="btn-add-stream"
-          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#272727] hover:bg-[#383838] text-white text-xs font-medium transition-colors border border-white/5"
-          title="Load Custom HLS .m3u8 Stream or API Endpoint"
-        >
-          <Plus className="w-4 h-4 text-[#ff0000]" />
-          <span>Stream .m3u8</span>
         </button>
 
         {/* Notifications */}

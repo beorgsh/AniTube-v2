@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Shuffle, Play, Sparkles, Flame, Tv, Calendar, Trophy, Zap } from 'lucide-react';
 import { Video } from '../types';
+import { FadeImage } from './FadeImage';
 
 interface AnimeHorizontalSliderProps {
   title: string;
@@ -56,18 +57,18 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
   const renderIcon = () => {
     switch (icon) {
       case 'flame':
-        return <Flame className="w-5 h-5 text-red-500 fill-red-500/20" />;
+        return <Flame className="w-5 h-5 text-white" />;
       case 'zap':
-        return <Zap className="w-5 h-5 text-amber-400 fill-amber-400/20" />;
+        return <Zap className="w-5 h-5 text-white" />;
       case 'tv':
-        return <Tv className="w-5 h-5 text-blue-400" />;
+        return <Tv className="w-5 h-5 text-white" />;
       case 'calendar':
-        return <Calendar className="w-5 h-5 text-emerald-400" />;
+        return <Calendar className="w-5 h-5 text-white" />;
       case 'trophy':
-        return <Trophy className="w-5 h-5 text-yellow-500 fill-yellow-500/20" />;
+        return <Trophy className="w-5 h-5 text-white" />;
       case 'sparkles':
       default:
-        return <Sparkles className="w-5 h-5 text-purple-400" />;
+        return <Sparkles className="w-5 h-5 text-white" />;
     }
   };
 
@@ -80,7 +81,7 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
       {/* Header with Title, Badges, Shuffle & Navigation Controls */}
       <div className="flex items-center justify-between gap-4 mb-3 px-1">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-1.5 rounded-lg bg-[#222222] border border-[#333333] shrink-0">
+          <div className="shrink-0 flex items-center justify-center text-white">
             {renderIcon()}
           </div>
           <div className="min-w-0">
@@ -108,7 +109,7 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
             title="Randomize & shuffle anime list"
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2c2c2c] active:scale-95 text-xs text-gray-300 hover:text-white border border-[#333333] transition-all cursor-pointer shadow-sm"
           >
-            <Shuffle className="w-3.5 h-3.5 text-red-400" />
+            <Shuffle className="w-3.5 h-3.5 text-white" />
             <span className="hidden sm:inline text-[11px] font-medium">Shuffle</span>
           </button>
 
@@ -116,7 +117,7 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
           {onViewAll && (
             <button
               onClick={onViewAll}
-              className="px-2.5 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2c2c2c] text-xs font-semibold text-red-400 hover:text-red-300 border border-[#333333] transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2c2c2c] text-xs font-semibold text-white hover:text-gray-300 border border-[#333333] transition-colors cursor-pointer"
             >
               <span className="text-[11px]">View all</span>
             </button>
@@ -145,19 +146,15 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
       {/* Horizontal Scrollable Row */}
       <div
         ref={scrollContainerRef}
-        className="flex items-stretch gap-3.5 overflow-x-auto pb-3 pt-1 scroll-smooth no-scrollbar scrollbar-none select-none -mx-1 px-1"
+        className="flex items-stretch gap-3.5 overflow-x-auto pb-4 pt-1 scroll-smooth no-scrollbar scrollbar-none select-none -mx-1 px-1"
         style={{ scrollSnapType: 'x mandatory' }}
       >
         {isLoading
           ? Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={`loading-${i}`}
-                className="w-44 sm:w-52 shrink-0 flex flex-col space-y-2 animate-pulse"
-              >
-                <div className="w-full aspect-[3/4] rounded-xl bg-[#222222]" />
-                <div className="h-3.5 bg-[#262626] rounded w-3/4" />
-                <div className="h-3 bg-[#1e1e1e] rounded w-1/2" />
-              </div>
+                className="w-40 sm:w-50 shrink-0 aspect-[9/15] rounded-2xl bg-[#1c1c1c] animate-pulse border border-[#272727]"
+              />
             ))
           : displayVideos.map((video) => {
               const subCount = video.tags?.find((t) => t.startsWith('Sub:'))?.replace('Sub: ', '');
@@ -168,74 +165,70 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
                 <div
                   key={video.id}
                   onClick={() => onSelectVideo(video)}
-                  className="w-38 sm:w-48 shrink-0 flex flex-col group/card cursor-pointer rounded-xl transition-all duration-200 hover:-translate-y-1"
+                  className="relative w-40 sm:w-50 shrink-0 aspect-[9/15] rounded-2xl overflow-hidden bg-[#161616] border border-[#272727] hover:border-white/40 shadow-xl group/card cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl flex flex-col justify-between"
                   style={{ scrollSnapAlign: 'start' }}
                 >
-                  {/* Poster Thumbnail Container (Real JSON Image) */}
-                  <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-[#1a1a1a] border border-[#2a2a2a] group-hover/card:border-red-600/50 shadow-md transition-all">
-                    <img
-                      src={video.thumbnail}
-                      alt={video.title}
-                      className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                    />
+                  {/* Background Full-Bleed Poster */}
+                  <FadeImage
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500"
+                    containerClassName="absolute inset-0 w-full h-full"
+                  />
 
-                    {/* Top Overlay Badges */}
-                    <div className="absolute top-2 left-2 flex flex-col gap-1 items-start pointer-events-none">
-                      {animeType && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-black/80 backdrop-blur-md text-amber-300 border border-white/10 shadow">
-                          {animeType}
-                        </span>
-                      )}
-                    </div>
+                  {/* Top Glass Scrim & Badges */}
+                  <div className="relative z-10 p-2.5 flex items-start justify-between gap-1.5 pointer-events-none bg-gradient-to-b from-black/80 via-black/30 to-transparent">
+                    {/* Left: Anime Type Pill */}
+                    {animeType && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-black/70 backdrop-blur-md text-amber-300 border border-amber-400/20 shadow-sm">
+                        {animeType}
+                      </span>
+                    )}
 
-                    {/* Top Right Sub / Dub Badges */}
-                    <div className="absolute top-2 right-2 flex items-center gap-1 pointer-events-none">
+                    {/* Right: Sub/Dub Pills */}
+                    <div className="flex items-center gap-1">
                       {subCount && subCount !== 'null' && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950/90 text-emerald-300 backdrop-blur-md border border-emerald-500/30 shadow">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950/90 text-emerald-300 backdrop-blur-md border border-emerald-500/30 shadow-sm">
                           SUB {subCount}
                         </span>
                       )}
                       {dubCount && dubCount !== 'null' && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950/90 text-purple-300 backdrop-blur-md border border-purple-500/30 shadow">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950/90 text-purple-300 backdrop-blur-md border border-purple-500/30 shadow-sm">
                           DUB {dubCount}
                         </span>
                       )}
                     </div>
+                  </div>
 
-                    {/* Play Hover Overlay */}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg transform scale-75 group-hover/card:scale-100 transition-transform">
-                        <Play className="w-5 h-5 fill-white ml-0.5" />
-                      </div>
-                    </div>
-
-                    {/* Bottom Total Episodes Badge */}
-                    <div className="absolute bottom-2 right-2 pointer-events-none">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-black/80 text-gray-200 backdrop-blur-sm border border-white/10">
-                        {video.totalEpisodes || video.duration}
-                      </span>
+                  {/* Center Play Button Overlay on Hover */}
+                  <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity bg-black/25 backdrop-blur-[1px] pointer-events-none">
+                    <div className="w-12 h-12 rounded-full bg-white/95 text-black flex items-center justify-center shadow-2xl transform scale-75 group-hover/card:scale-100 transition-transform duration-200">
+                      <Play className="w-5 h-5 fill-black ml-0.5 text-black" />
                     </div>
                   </div>
 
-                  {/* Anime Meta Details with Real Poster Avatar */}
-                  <div className="mt-2.5 flex items-start gap-2 px-0.5">
-                    <img
-                      src={video.thumbnail}
-                      alt={video.title}
-                      className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-white/10 mt-0.5"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-xs font-semibold text-white line-clamp-2 leading-tight group-hover/card:text-red-400 transition-colors" title={video.title}>
-                        {video.title}
-                      </h3>
-                      <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-1">
-                        <span className="truncate">{video.category}</span>
-                        <span>•</span>
-                        <span className="text-[10px] text-gray-400 shrink-0">{video.views}</span>
-                      </div>
+                  {/* Bottom YouTube Reels/Shorts Inside-Poster Content Overlay */}
+                  <div className="relative z-10 pt-16 pb-3 px-3 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end pointer-events-none space-y-1.5">
+                    {/* Title */}
+                    <h3 
+                      className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2 drop-shadow-md group-hover/card:text-white" 
+                      title={video.title}
+                    >
+                      {video.title}
+                    </h3>
+
+                    {/* Bottom Metadata inside poster */}
+                    <div className="flex items-center justify-between gap-1 text-[11px] text-gray-300">
+                      <span className="truncate max-w-[90px] font-medium text-gray-200 drop-shadow">
+                        {video.category}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/20 backdrop-blur-md text-white border border-white/20 shrink-0">
+                        {video.totalEpisodes || video.duration}
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-gray-400 font-medium">
+                      {video.views} views
                     </div>
                   </div>
                 </div>

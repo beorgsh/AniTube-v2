@@ -122,6 +122,12 @@ export interface AnimeInfoData {
   id: string;
   title: string;
   poster: string;
+  banner?: string;
+  bannerImage?: string;
+  fanart?: string;
+  cover?: string;
+  background_image?: string;
+  images?: Array<{ image: string; type?: string }>;
   description: string;
   malId?: number;
   anilistId?: number;
@@ -154,5 +160,7 @@ export type ViewMode =
   | 'genre'
   | 'subscriptions'
   | 'library'
-  | 'history';
+  | 'history'
+  | 'watch_later'
+  | 'liked';
 
