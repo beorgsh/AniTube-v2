@@ -107,6 +107,13 @@ export const VideoCard = ({
         <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/70 backdrop-blur-sm text-gray-300 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           .m3u8
         </div>
+
+        {/* EP Episode Number Badge if available */}
+        {video.episodeNumber && (
+          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-red-600/90 text-white shadow-md z-10 border border-red-500/50">
+            EP {video.episodeNumber}
+          </div>
+        )}
       </div>
 
       {/* Details Row */}

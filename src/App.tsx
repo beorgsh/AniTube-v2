@@ -8,6 +8,9 @@ import { WatchView } from './components/WatchView';
 import { AnimeHorizontalSlider } from './components/AnimeHorizontalSlider';
 import { AnimeCategoryView } from './components/AnimeCategoryView';
 import { SavedListView } from './components/SavedListView';
+import { WatchHistoryView } from './components/WatchHistoryView';
+import { LandingPage } from './components/LandingPage';
+import { AvatarSetupModal } from './components/AvatarSetupModal';
 import { VoiceSearchModal } from './components/VoiceSearchModal';
 import { MOCK_VIDEOS, CATEGORIES } from './data/mockVideos';
 import { Video, ViewMode } from './types';
@@ -23,6 +26,13 @@ import {
 import { 
   getWatchLaterList, 
   getLikedEpisodesList, 
+  getWatchHistoryList,
+  addToWatchHistory,
+  getUserProfile,
+  saveUserProfile,
+  getHasVisitedLanding,
+  setHasVisitedLanding,
+  UserProfile,
   LikedEpisodeItem 
 } from './services/sessionStorage';
 import { History, Tv, RefreshCw, Loader2, Sparkles, AlertCircle, Clock, ThumbsUp, ChevronRight, Shuffle } from 'lucide-react';
@@ -36,9 +46,16 @@ export default function App() {
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
   const [customVideos, setCustomVideos] = useState<Video[]>([]);
 
-  // Watch Later and Liked Items State from Session Cookies
+  // Landing & Profile Avatar State
+  const [showLanding, setShowLanding] = useState<boolean>(() => !getHasVisitedLanding());
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => getUserProfile());
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
+
+  // Watch Later, Liked Items, and Watch History State from Session Storage
   const [watchLaterItems, setWatchLaterItems] = useState<Video[]>([]);
   const [likedItems, setLikedItems] = useState<LikedEpisodeItem[]>([]);
+  const [watchHistoryItems, setWatchHistoryItems] = useState<Video[]>([]);
+
 
   // API Recent Anime State (Grid feed)
   const [apiVideos, setApiVideos] = useState<Video[]>([]);
@@ -66,14 +83,25 @@ export default function App() {
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Sync Watch Later & Liked items on mount and on storage events
+  // Sync Watch Later, Liked items & Watch History on mount and on storage events
   useEffect(() => {
     setWatchLaterItems(getWatchLaterList());
     setLikedItems(getLikedEpisodesList());
 
+    let currentHistory = getWatchHistoryList();
+    if (currentHistory.length === 0) {
+      // Seed initial 5 anime into watch history if empty
+      const initialSeed = MOCK_VIDEOS.slice(0, 5);
+      initialSeed.forEach((v) => addToWatchHistory(v));
+      currentHistory = getWatchHistoryList();
+    }
+    setWatchHistoryItems(currentHistory);
+
     const handleStorageUpdate = () => {
       setWatchLaterItems(getWatchLaterList());
       setLikedItems(getLikedEpisodesList());
+      setWatchHistoryItems(getWatchHistoryList());
+      setUserProfile(getUserProfile());
     };
 
     window.addEventListener('anitube_storage_update', handleStorageUpdate);
@@ -368,6 +396,8 @@ export default function App() {
   const handleSelectVideo = (video: Video) => {
     setSelectedVideo(video);
     setActiveView('watch');
+    addToWatchHistory(video);
+    setWatchHistoryItems(getWatchHistoryList());
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -384,39 +414,53 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-[#f1f1f1] flex flex-col font-sans selection:bg-[#ff0000] selection:text-white">
-      {/* Top Navigation Bar */}
-      <Header
-        onToggleSidebar={handleToggleSidebar}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
-        onHomeClick={handleHomeClick}
-      />
-
-      {/* Main Layout Area */}
-      <div className="flex flex-1 relative">
-        {/* Sidebar */}
-        <Sidebar
-          isOpen={isSidebarOpen}
-          activeView={activeView}
-          onSelectView={(view) => {
-            setActiveView(view);
-            if (view !== 'watch') {
-              setSelectedVideo(null);
-            }
+      {showLanding ? (
+        <LandingPage
+          onGetStarted={() => setIsAvatarModalOpen(true)}
+          onBrowseDirectly={() => {
+            setHasVisitedLanding(true);
+            setShowLanding(false);
           }}
-          onSelectCategory={(cat) => {
-            setSelectedCategory(cat);
-            setActiveView('home');
-            setSelectedVideo(null);
-          }}
-          onClose={() => setIsSidebarOpen(false)}
-          selectedCategory={selectedCategory}
-          isWatchPage={activeView === 'watch'}
         />
+      ) : (
+        <>
+          {/* Top Navigation Bar */}
+          <Header
+            onToggleSidebar={handleToggleSidebar}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+            onHomeClick={handleHomeClick}
+            userProfile={userProfile}
+            onOpenAvatarModal={() => setIsAvatarModalOpen(true)}
+          />
 
-        {/* Content Body */}
-        <main className="flex-1 min-w-0 bg-[#0f0f0f]">
+          {/* Main Layout Area */}
+          <div className="flex flex-1 relative">
+            {/* Sidebar */}
+            <Sidebar
+              isOpen={isSidebarOpen}
+              activeView={activeView}
+              onSelectView={(view) => {
+                setActiveView(view);
+                if (view !== 'watch') {
+                  setSelectedVideo(null);
+                }
+              }}
+              onSelectCategory={(cat) => {
+                setSelectedCategory(cat);
+                setActiveView('home');
+                setSelectedVideo(null);
+              }}
+              onSelectVideo={handleSelectVideo}
+              onClose={() => setIsSidebarOpen(false)}
+              selectedCategory={selectedCategory}
+              isWatchPage={activeView === 'watch'}
+            />
+
+            {/* Content Body */}
+            <main className="flex-1 min-w-0 bg-[#0f0f0f]">
+
           {/* Watch View */}
           {activeView === 'watch' && selectedVideo && (
             <WatchView
@@ -496,25 +540,48 @@ export default function App() {
             />
           )}
 
-          {/* Subscriptions Feed */}
+          {/* Subscribed View */}
           {activeView === 'subscriptions' && (
             <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
               <div className="flex items-center justify-between border-b border-[#272727] pb-3">
                 <div className="flex items-center gap-2">
-                  <Tv className="w-6 h-6 text-red-500" />
-                  <h1 className="text-xl font-bold text-white">Latest from Anime Subscriptions</h1>
+                  <Sparkles className="w-6 h-6 text-white" />
+                  <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                    <span>Subscribed Anime</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-[#272727] text-gray-300 font-normal">
+                      {watchLaterItems.length} {watchLaterItems.length === 1 ? 'anime' : 'animes'}
+                    </span>
+                  </h1>
                 </div>
-                <span className="text-xs text-blue-400 cursor-pointer hover:underline">Manage</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
-                {allVideos.map((video) => (
-                  <VideoCard
-                    key={video.id}
-                    video={video}
-                    onSelectVideo={handleSelectVideo}
-                  />
-                ))}
-              </div>
+
+              {watchLaterItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center bg-[#151515] rounded-2xl border border-[#252525]">
+                  <div className="w-16 h-16 rounded-full bg-[#272727] flex items-center justify-center text-gray-400 mb-4">
+                    <Sparkles className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">No Subscribed Anime Yet</h3>
+                  <p className="text-xs text-gray-400 mt-1 max-w-sm">
+                    Click "Subscribe" on any anime details page to add it to your Subscribed collection and sidebar feed.
+                  </p>
+                  <button
+                    onClick={handleHomeClick}
+                    className="mt-5 px-5 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:bg-gray-200 transition-colors cursor-pointer"
+                  >
+                    Explore Anime Hub
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+                  {watchLaterItems.map((video) => (
+                    <VideoCard
+                      key={video.id}
+                      video={video}
+                      onSelectVideo={handleSelectVideo}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -544,22 +611,12 @@ export default function App() {
 
           {/* History View */}
           {activeView === 'history' && (
-            <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
-              <div className="flex items-center gap-3 border-b border-[#272727] pb-3">
-                <History className="w-6 h-6 text-gray-400" />
-                <h1 className="text-xl font-bold text-white">Watch History</h1>
-              </div>
-              <div className="space-y-3">
-                {allVideos.slice(0, 8).map((video) => (
-                  <VideoCard
-                    key={video.id}
-                    video={video}
-                    layout="list"
-                    onSelectVideo={handleSelectVideo}
-                  />
-                ))}
-              </div>
-            </div>
+            <WatchHistoryView
+              historyItems={watchHistoryItems}
+              onSelectVideo={handleSelectVideo}
+              onBackToHome={handleHomeClick}
+              onRefresh={() => setWatchHistoryItems(getWatchHistoryList())}
+            />
           )}
 
           {/* Library / You View */}
@@ -630,7 +687,7 @@ export default function App() {
                   </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {allVideos.slice(0, 4).map((video) => (
+                  {watchHistoryItems.slice(0, 4).map((video) => (
                     <VideoCard
                       key={video.id}
                       video={video}
@@ -737,6 +794,18 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Watch History Horizontal Slider (Limit 10 items) */}
+                {!searchQuery && selectedCategory === 'All' && watchHistoryItems.length > 0 && (
+                  <AnimeHorizontalSlider
+                    title="Watch History"
+                    subtitle="Continue watching where you left off"
+                    icon="history"
+                    videos={watchHistoryItems.slice(0, 10)}
+                    onSelectVideo={handleSelectVideo}
+                    onViewAll={() => setActiveView('history')}
+                  />
+                )}
+
                 {/* Top Reel (Reel #0 from current sequence, e.g. Popular or randomized) */}
                 {!searchQuery && selectedCategory === 'All' && orderedReels.length > 0 && (
                   <AnimeHorizontalSlider
@@ -761,14 +830,6 @@ export default function App() {
                           Recent Anime Catalogue & Updates
                         </h2>
                       </div>
-                      <button
-                        onClick={randomizeReels}
-                        title="Randomize category reels order"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2c2c2c] active:scale-95 text-xs text-gray-300 hover:text-white border border-[#333333] transition-all cursor-pointer shadow-sm"
-                      >
-                        <Shuffle className="w-3.5 h-3.5 text-white" />
-                        <span className="text-[11px] font-medium">Randomize Reels</span>
-                      </button>
                     </div>
                   </div>
                 )}
@@ -777,7 +838,11 @@ export default function App() {
                 {isInitialLoading || isSearching || isGenreLoading ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
                     {Array.from({ length: 8 }).map((_, i) => (
-                      <VideoCardSkeleton key={`skeleton-${i}`} />
+                      <VideoCardSkeleton
+                        key={`skeleton-${i}`}
+                        label={searchQuery ? `Searching "${searchQuery}"...` : selectedCategory !== 'All' ? `Loading ${selectedCategory}...` : 'Loading AniTube...'}
+                        delayMs={i * 60}
+                      />
                     ))}
                   </div>
                 ) : (searchQuery ? searchResults.length === 0 : filteredVideos.length === 0) ? (
@@ -855,7 +920,11 @@ export default function App() {
                     {isLoadingMore && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 mt-8">
                         {Array.from({ length: 4 }).map((_, i) => (
-                          <VideoCardSkeleton key={`loading-more-skeleton-${i}`} />
+                          <VideoCardSkeleton
+                            key={`loading-more-skeleton-${i}`}
+                            label="Fetching Next Page..."
+                            delayMs={i * 60}
+                          />
                         ))}
                       </div>
                     )}
@@ -907,6 +976,21 @@ export default function App() {
           setActiveView('home');
         }}
       />
+        </>
+      )}
+
+      {/* Profile Avatar Setup Modal */}
+      <AvatarSetupModal
+        isOpen={isAvatarModalOpen}
+        currentProfile={userProfile}
+        onClose={() => setIsAvatarModalOpen(false)}
+        onSaveComplete={(updatedProfile) => {
+          setUserProfile(updatedProfile);
+          setHasVisitedLanding(true);
+          setShowLanding(false);
+        }}
+      />
     </div>
   );
 }
+

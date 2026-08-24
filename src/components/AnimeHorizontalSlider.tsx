@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Shuffle, Play, Sparkles, Flame, Tv, Calendar, Trophy, Zap } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Shuffle, Play, Sparkles, Flame, Tv, Calendar, Trophy, Zap, Captions, Mic, Loader2, History } from 'lucide-react';
 import { Video } from '../types';
 import { FadeImage } from './FadeImage';
+
 
 interface AnimeHorizontalSliderProps {
   title: string;
   subtitle?: string;
-  icon?: 'flame' | 'sparkles' | 'tv' | 'calendar' | 'trophy' | 'zap';
+  icon?: 'flame' | 'sparkles' | 'tv' | 'calendar' | 'trophy' | 'zap' | 'history';
   videos: Video[];
   onSelectVideo: (video: Video) => void;
   onViewAll?: () => void;
@@ -66,6 +67,8 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
         return <Calendar className="w-5 h-5 text-white" />;
       case 'trophy':
         return <Trophy className="w-5 h-5 text-white" />;
+      case 'history':
+        return <History className="w-5 h-5 text-white" />;
       case 'sparkles':
       default:
         return <Sparkles className="w-5 h-5 text-white" />;
@@ -103,16 +106,6 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Shuffle / Randomize Button */}
-          <button
-            onClick={handleShuffle}
-            title="Randomize & shuffle anime list"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1f1f1f] hover:bg-[#2c2c2c] active:scale-95 text-xs text-gray-300 hover:text-white border border-[#333333] transition-all cursor-pointer shadow-sm"
-          >
-            <Shuffle className="w-3.5 h-3.5 text-white" />
-            <span className="hidden sm:inline text-[11px] font-medium">Shuffle</span>
-          </button>
-
           {/* View All Button */}
           {onViewAll && (
             <button
@@ -153,8 +146,32 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
           ? Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={`loading-${i}`}
-                className="w-40 sm:w-50 shrink-0 aspect-[9/15] rounded-2xl bg-[#1c1c1c] animate-pulse border border-[#272727]"
-              />
+                style={{ animationDelay: `${i * 70}ms`, animationFillMode: 'forwards' }}
+                className="relative w-40 sm:w-48 shrink-0 aspect-[9/14] sm:aspect-[2/3] rounded-2xl bg-[#181818] border border-[#272727] overflow-hidden flex flex-col justify-between p-3 select-none animate-skeleton-fade opacity-0 shadow-lg"
+              >
+                {/* Shimmer sweep animation */}
+                <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_infinite] bg-gradient-to-r from-transparent via-[#2d2d2d]/60 to-transparent z-[1]" />
+
+                {/* Top Badges Skeleton */}
+                <div className="relative z-10 flex items-center justify-between">
+                  <div className="w-12 h-4 rounded-md bg-[#2a2a2a] animate-pulse" />
+                  <div className="flex items-center gap-1">
+                    <div className="w-7 h-4 rounded-md bg-[#2a2a2a] animate-pulse" />
+                    <div className="w-7 h-4 rounded-md bg-[#2a2a2a] animate-pulse" />
+                  </div>
+                </div>
+
+                {/* Center Background Watermark Icon behind skeleton */}
+                <div className="absolute inset-0 flex items-center justify-center text-[#222222] pointer-events-none z-0">
+                  <Tv className="w-12 h-12 opacity-30" />
+                </div>
+
+                {/* Bottom Overlay Skeleton */}
+                <div className="relative z-10 space-y-1">
+                  <div className="w-5/6 h-3 bg-[#2d2d2d] rounded animate-pulse" />
+                  <div className="w-1/2 h-2.5 bg-[#242424] rounded animate-pulse" />
+                </div>
+              </div>
             ))
           : displayVideos.map((video) => {
               const subCount = video.tags?.find((t) => t.startsWith('Sub:'))?.replace('Sub: ', '');
@@ -165,51 +182,70 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
                 <div
                   key={video.id}
                   onClick={() => onSelectVideo(video)}
-                  className="relative w-40 sm:w-50 shrink-0 aspect-[9/15] rounded-2xl overflow-hidden bg-[#161616] border border-[#272727] hover:border-white/40 shadow-xl group/card cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl flex flex-col justify-between"
+                  className="relative w-40 sm:w-48 shrink-0 aspect-[9/14] sm:aspect-[2/3] rounded-2xl overflow-hidden bg-[#161616] border border-[#272727] hover:border-white/40 shadow-xl group/card cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl flex flex-col justify-between"
                   style={{ scrollSnapAlign: 'start' }}
                 >
-                  {/* Background Full-Bleed Poster */}
-                  <FadeImage
-                    src={video.thumbnail}
-                    alt={video.title}
-                    className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500"
-                    containerClassName="absolute inset-0 w-full h-full"
-                  />
+                  {/* Background Full-Bleed Portrait Poster */}
+                  <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
+                    <FadeImage
+                      src={video.thumbnail || video.poster}
+                      alt={video.title}
+                      className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500"
+                      containerClassName="w-full h-full"
+                    />
+                  </div>
 
-                  {/* Top Glass Scrim & Badges */}
-                  <div className="relative z-10 p-2.5 flex items-start justify-between gap-1.5 pointer-events-none bg-gradient-to-b from-black/80 via-black/30 to-transparent">
-                    {/* Left: Anime Type Pill */}
-                    {animeType && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-black/70 backdrop-blur-md text-amber-300 border border-amber-400/20 shadow-sm">
-                        {animeType}
-                      </span>
-                    )}
+                  {/* Gradient Black Overlay across the whole portrait card */}
+                  <div className="absolute inset-0 z-[1] bg-gradient-to-t from-black/95 via-black/40 to-black/20 pointer-events-none transition-opacity group-hover/card:via-black/30" />
 
-                    {/* Right: Sub/Dub Pills */}
+                  {/* Top Badges (Type and Mic / CC icons) */}
+                  <div className="relative z-10 p-2.5 flex items-start justify-between gap-1.5 pointer-events-none">
+                    {/* Left: EP Episode Number Badge or Anime Type Pill */}
                     <div className="flex items-center gap-1">
+                      {video.episodeNumber ? (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-red-600 backdrop-blur-md text-white border border-red-500/50 shadow-sm">
+                          EP {video.episodeNumber}
+                        </span>
+                      ) : animeType ? (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-black/60 backdrop-blur-md text-amber-300 border border-white/10 shadow-sm">
+                          {animeType}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Right: Sub/Dub Pills with Mic and CC Icons */}
+                    <div className="flex items-center gap-1.5">
                       {subCount && subCount !== 'null' && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950/90 text-emerald-300 backdrop-blur-md border border-emerald-500/30 shadow-sm">
-                          SUB {subCount}
+                        <span 
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-black/60 backdrop-blur-md text-emerald-400 border border-emerald-500/30 shadow-sm"
+                          title={`Subtitles: Episode ${subCount}`}
+                        >
+                          <Captions className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                          <span>{subCount}</span>
                         </span>
                       )}
                       {dubCount && dubCount !== 'null' && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950/90 text-purple-300 backdrop-blur-md border border-purple-500/30 shadow-sm">
-                          DUB {dubCount}
+                        <span 
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-black/60 backdrop-blur-md text-purple-400 border border-purple-500/30 shadow-sm"
+                          title={`Dubbed: Episode ${dubCount}`}
+                        >
+                          <Mic className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                          <span>{dubCount}</span>
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Center Play Button Overlay on Hover */}
-                  <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity bg-black/25 backdrop-blur-[1px] pointer-events-none">
-                    <div className="w-12 h-12 rounded-full bg-white/95 text-black flex items-center justify-center shadow-2xl transform scale-75 group-hover/card:scale-100 transition-transform duration-200">
+                  <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity bg-black/20 pointer-events-none">
+                    <div className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-75 group-hover/card:scale-100 transition-transform duration-200">
                       <Play className="w-5 h-5 fill-black ml-0.5 text-black" />
                     </div>
                   </div>
 
-                  {/* Bottom YouTube Reels/Shorts Inside-Poster Content Overlay */}
-                  <div className="relative z-10 pt-16 pb-3 px-3 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end pointer-events-none space-y-1.5">
-                    {/* Title */}
+                  {/* Bottom Info Overlay */}
+                  <div className="relative z-10 pt-16 pb-3 px-3 flex flex-col justify-end pointer-events-none space-y-1.5">
+                    {/* Title with Latest Episode number (e.g. One Piece: EP 1129) */}
                     <h3 
                       className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2 drop-shadow-md group-hover/card:text-white" 
                       title={video.title}
@@ -217,18 +253,15 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
                       {video.title}
                     </h3>
 
-                    {/* Bottom Metadata inside poster */}
+                    {/* Bottom Metadata */}
                     <div className="flex items-center justify-between gap-1 text-[11px] text-gray-300">
-                      <span className="truncate max-w-[90px] font-medium text-gray-200 drop-shadow">
+                      <span className="truncate font-medium text-gray-200 drop-shadow">
                         {video.category}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/20 backdrop-blur-md text-white border border-white/20 shrink-0">
-                        {video.totalEpisodes || video.duration}
                       </span>
                     </div>
 
                     <div className="text-[10px] text-gray-400 font-medium">
-                      {video.views} views
+                      {video.views}
                     </div>
                   </div>
                 </div>

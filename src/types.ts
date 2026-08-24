@@ -50,6 +50,8 @@ export interface Video {
   title: string;
   description: string;
   thumbnail: string;
+  poster?: string;
+  banner?: string;
   duration: string;
   views: string;
   viewsCount: number;

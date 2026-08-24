@@ -57,8 +57,17 @@ export const FadeImage: React.FC<FadeImageProps> = ({
     }
   };
 
+  const isPositioned =
+    containerClassName.includes('absolute') ||
+    containerClassName.includes('fixed') ||
+    containerClassName.includes('relative');
+
+  const wrapperClass = isPositioned
+    ? `overflow-hidden ${containerClassName}`
+    : `relative overflow-hidden ${containerClassName}`;
+
   return (
-    <div className={`relative overflow-hidden ${containerClassName}`}>
+    <div className={wrapperClass}>
       {/* Background placeholder / skeleton while image is loading */}
       {!isLoaded && showSkeleton && (
         <div className="absolute inset-0 bg-[#1f1f1f] animate-pulse pointer-events-none" />
@@ -73,7 +82,7 @@ export const FadeImage: React.FC<FadeImageProps> = ({
           onError={handleError}
           referrerPolicy="no-referrer"
           loading="lazy"
-          className={`${className} transition-opacity duration-300 ease-out ${
+          className={`w-full h-full object-cover block ${className} transition-opacity duration-300 ease-out ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
           {...props}
@@ -95,10 +104,11 @@ export const VerifiedBadge: React.FC<{ className?: string }> = ({
       <circle cx="12" cy="12" r="10" fill="#3ea6ff" />
       <path
         d="M8.5 12.2L10.8 14.5L15.8 9.5"
-        stroke="#0f0f0f"
+        stroke="#ffffff"
         strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        fill="none"
       />
     </svg>
   );

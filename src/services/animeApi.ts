@@ -283,15 +283,27 @@ export function transformAnimeToVideo(anime: AnikotoAnime, index: number): Video
     ? anime.description
     : `Watch the latest episodes of ${anime.title} with high-definition multi-bitrate HLS streams on AniTube.\n\nStatus: ${anime.status || 'Airing'}\nEpisodes: ${anime.episodes || 'Ongoing'}\nAired: ${anime.aired || '2026'}\nScore: ${anime.score || 'N/A'}`;
 
+  const rawEpisodes = anime.episodes ? parseInt(anime.episodes, 10) : (anime.is_sub || 1);
+  const latestEp = !isNaN(rawEpisodes) && rawEpisodes > 0 ? rawEpisodes : 1;
+  const rawTitle = anime.title || anime.titles || anime.alternative || 'Untitled Anime';
+  const cleanTitle = rawTitle.replace(/:\s*EP\s*\d+/i, '').replace(/\s*-\s*Episode\s*\d+/i, '').replace(/\s*EP\s*\d+/i, '').trim();
+  const formattedTitle = latestEp > 0 ? `${cleanTitle}: EP ${latestEp}` : cleanTitle;
+
+  const portraitPoster = anime.poster && anime.poster.trim().length > 0
+    ? anime.poster
+    : landscapeThumbnail;
+
   return {
     id: `anime-${anime.id}`,
     malId: malId,
     aniId: anime.ani_id,
     slug: anime.slug,
-    title: anime.title || anime.titles || anime.alternative || 'Untitled Anime',
+    title: formattedTitle,
     description,
     thumbnail: landscapeThumbnail,
-    duration: anime.status === 'Currently Airing' && index === 0 ? 'LIVE' : durationStr,
+    poster: portraitPoster,
+    banner: anime.background_image || landscapeThumbnail,
+    duration: `EP ${latestEp}`,
     views: viewsStr,
     viewsCount: viewsNumber,
     uploadedAt: formatRelativeTime(anime.updated_at, anime.aired),
@@ -304,8 +316,8 @@ export function transformAnimeToVideo(anime: AnikotoAnime, index: number): Video
     commentsCount: `${(Math.floor(viewsNumber * 0.003) + 12).toLocaleString()}`,
     comments: generateCommentsForAnime(anime),
     isLive: anime.status === 'Currently Airing' && index === 0,
-    episodeNumber: 1,
-    totalEpisodes: anime.episodes || '1',
+    episodeNumber: latestEp,
+    totalEpisodes: anime.episodes || String(latestEp),
   };
 }
 
@@ -749,16 +761,16 @@ export function transformAnikotoCategoryItemToVideo(
     handle: `@${cleanTitle.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15)}`,
   };
 
-  const parsedSub = item.sub ? parseInt(item.sub, 10) : 1;
-  const episodeNumber = !isNaN(parsedSub) && parsedSub > 0 ? parsedSub : 1;
-  const totalEpisodes = item.episodes || (item.sub ? `${item.sub} eps` : 'Ongoing');
+  const parsedSub = item.sub ? parseInt(item.sub, 10) : 0;
+  const parsedEpisodes = item.episodes ? parseInt(item.episodes, 10) : 0;
+  const latestEp = parsedSub > 0 ? parsedSub : (parsedEpisodes > 0 ? parsedEpisodes : 1);
+  const totalEpisodes = item.episodes || (item.sub ? `${item.sub} eps` : (latestEp > 1 ? String(latestEp) : 'Ongoing'));
 
-  let durationText = '24:00';
-  if (item.sub) {
-    durationText = `EP ${item.sub}`;
-  } else if (item.episodes) {
-    durationText = `${item.episodes} EPS`;
-  }
+  const rawTitle = item.title?.trim() || 'Untitled Anime';
+  const baseTitle = rawTitle.replace(/:\s*EP\s*\d+/i, '').replace(/\s*-\s*Episode\s*\d+/i, '').replace(/\s*EP\s*\d+/i, '').trim();
+  const formattedTitle = latestEp > 0 ? `${baseTitle}: EP ${latestEp}` : baseTitle;
+
+  const durationText = `EP ${latestEp}`;
 
   const viewsCount = Math.floor(Math.random() * 550000) + 120000;
   const viewsStr = `${(viewsCount / 1000).toFixed(0)}K views`;
@@ -766,7 +778,7 @@ export function transformAnikotoCategoryItemToVideo(
   const tags = [
     categoryLabel,
     animeType,
-    item.sub ? `Sub: ${item.sub}` : '',
+    item.sub ? `Sub: ${item.sub}` : `Sub: ${latestEp}`,
     item.dub ? `Dub: ${item.dub}` : '',
     item.episodes ? `${item.episodes} Episodes` : '',
   ].filter(Boolean);
@@ -774,9 +786,11 @@ export function transformAnikotoCategoryItemToVideo(
   return {
     id: `slug-${item.id}`,
     slug: item.id,
-    title: cleanTitle,
+    title: formattedTitle,
     description: `${cleanTitle} (${animeType})\n\nCategory: ${categoryLabel}\nEpisodes: ${totalEpisodes}\nSubbed: ${item.sub || 'Available'} | Dubbed: ${item.dub || 'None'}\n\nStream full episodes directly with automatic HLS video playback and synchronized English subtitles.`,
     thumbnail: realPoster,
+    poster: realPoster,
+    banner: realPoster,
     duration: durationText,
     views: viewsStr,
     viewsCount,
@@ -800,7 +814,7 @@ export function transformAnikotoCategoryItemToVideo(
         repliesCount: 4,
       },
     ],
-    episodeNumber,
+    episodeNumber: latestEp,
     totalEpisodes,
   };
 }

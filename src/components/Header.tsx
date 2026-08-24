@@ -11,6 +11,8 @@ import {
   Moon
 } from 'lucide-react';
 
+import { UserProfile } from '../services/sessionStorage';
+
 interface HeaderProps {
   onToggleSidebar: () => void;
   searchQuery: string;
@@ -18,6 +20,8 @@ interface HeaderProps {
   onSelectVideoById?: (id: string) => void;
   onOpenVoiceModal: () => void;
   onHomeClick: () => void;
+  userProfile?: UserProfile;
+  onOpenAvatarModal?: () => void;
 }
 
 export const Header = ({
@@ -25,8 +29,11 @@ export const Header = ({
   searchQuery,
   onSearchChange,
   onOpenVoiceModal,
-  onHomeClick
+  onHomeClick,
+  userProfile,
+  onOpenAvatarModal,
 }: HeaderProps) => {
+
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -235,12 +242,13 @@ export const Header = ({
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
             id="btn-user-menu"
-            className="flex items-center justify-center p-0.5 rounded-full ring-2 ring-transparent hover:ring-gray-600 transition-all focus:outline-none"
+            className="flex items-center justify-center p-0.5 rounded-full ring-2 ring-transparent hover:ring-red-500/80 transition-all focus:outline-none"
+            title="User Settings & Avatar"
           >
             <img
-              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
-              alt="User profile"
-              className="w-8 h-8 rounded-full object-cover"
+              src={userProfile?.avatarUrl || "https://api.dicebear.com/9.x/adventurer/png?seed=otaku_master"}
+              alt="User profile avatar"
+              className="w-8 h-8 rounded-full object-cover bg-[#222] border border-[#333]"
               referrerPolicy="no-referrer"
             />
           </button>
@@ -250,21 +258,33 @@ export const Header = ({
             <div className="absolute right-0 top-12 z-50 w-64 bg-[#212121] border border-[#303030] rounded-xl shadow-2xl py-2 text-sm text-gray-200">
               <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2d2d2d]">
                 <img
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
+                  src={userProfile?.avatarUrl || "https://api.dicebear.com/9.x/adventurer/png?seed=otaku_master"}
                   alt="User"
-                  className="w-10 h-10 rounded-full object-cover"
+                  className="w-10 h-10 rounded-full object-cover bg-[#1c1c1c] border border-[#333]"
                   referrerPolicy="no-referrer"
                 />
-                <div>
-                  <p className="font-semibold text-white text-sm">Otaku Explorer</p>
-                  <p className="text-xs text-gray-400">@anitube_user</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-white text-sm truncate">
+                    {userProfile?.name || 'Otaku Explorer'}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">
+                    @{userProfile?.username || 'otaku_master'}
+                  </p>
                 </div>
               </div>
               <div className="py-1">
-                <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2d2d2d] cursor-pointer">
-                  <User className="w-4 h-4 text-gray-400" />
-                  <span>Your channel</span>
-                </div>
+                {onOpenAvatarModal && (
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onOpenAvatarModal();
+                    }}
+                    className="w-full text-left flex items-center gap-3 px-4 py-2.5 hover:bg-[#2d2d2d] text-red-400 hover:text-red-300 font-semibold cursor-pointer transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Change Avatar / Profile</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2d2d2d] cursor-pointer">
                   <Moon className="w-4 h-4 text-gray-400" />
                   <span>Appearance: Dark Mode (Fixed)</span>
@@ -281,6 +301,7 @@ export const Header = ({
             </div>
           )}
         </div>
+
       </div>
     </header>
   );

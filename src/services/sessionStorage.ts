@@ -183,3 +183,113 @@ export function removeLikedEpisode(key: string): void {
   const updated = list.filter(item => item.key !== key);
   saveLikedEpisodesList(updated);
 }
+
+/* ================= WATCH HISTORY (Session Persisted) ================= */
+
+const WATCH_HISTORY_KEY = 'anitube_watch_history_session';
+
+export function getWatchHistoryList(): Video[] {
+  try {
+    const raw = sessionStorage.getItem(WATCH_HISTORY_KEY) || getSessionCookie(WATCH_HISTORY_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Error reading watch history from session:', e);
+  }
+  return [];
+}
+
+export function saveWatchHistoryList(list: Video[]): void {
+  try {
+    const jsonStr = JSON.stringify(list);
+    sessionStorage.setItem(WATCH_HISTORY_KEY, jsonStr);
+    setSessionCookie(WATCH_HISTORY_KEY, JSON.stringify(list.slice(0, 30)));
+    window.dispatchEvent(new CustomEvent('anitube_storage_update', { detail: { type: 'watch_history' } }));
+  } catch (e) {
+    console.warn('Error saving watch history:', e);
+  }
+}
+
+export function addToWatchHistory(video: Video): void {
+  const list = getWatchHistoryList();
+  // Filter out existing occurrence if present so it moves to top
+  const filtered = list.filter(item => item.id !== video.id && (video.slug ? item.slug !== video.slug : true));
+  const updated = [video, ...filtered];
+  saveWatchHistoryList(updated);
+}
+
+export function removeFromWatchHistory(videoId: string): void {
+  const list = getWatchHistoryList();
+  const updated = list.filter(item => item.id !== videoId && item.slug !== videoId);
+  saveWatchHistoryList(updated);
+}
+
+export function removeMultipleFromWatchHistory(videoIds: string[]): void {
+  const set = new Set(videoIds);
+  const list = getWatchHistoryList();
+  const updated = list.filter(item => !set.has(item.id) && (!item.slug || !set.has(item.slug)));
+  saveWatchHistoryList(updated);
+}
+
+export function clearWatchHistory(): void {
+  saveWatchHistoryList([]);
+}
+
+/* ================= USER PROFILE & LANDING SESSION ================= */
+
+export interface UserProfile {
+  name: string;
+  username: string;
+  avatarUrl: string;
+  avatarStyle: string;
+}
+
+const USER_PROFILE_KEY = 'anitube_user_profile_data';
+const LANDING_VISITED_KEY = 'anitube_landing_visited_session';
+
+export function getUserProfile(): UserProfile {
+  try {
+    const raw = sessionStorage.getItem(USER_PROFILE_KEY) || localStorage.getItem(USER_PROFILE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Error reading user profile:', e);
+  }
+  return {
+    name: 'Otaku Explorer',
+    username: 'otaku_master',
+    avatarUrl: 'https://api.dicebear.com/9.x/adventurer/png?seed=otaku_master',
+    avatarStyle: 'adventurer',
+  };
+}
+
+export function saveUserProfile(profile: UserProfile): void {
+  try {
+    const jsonStr = JSON.stringify(profile);
+    sessionStorage.setItem(USER_PROFILE_KEY, jsonStr);
+    localStorage.setItem(USER_PROFILE_KEY, jsonStr);
+    window.dispatchEvent(new CustomEvent('anitube_storage_update', { detail: { type: 'user_profile' } }));
+  } catch (e) {
+    console.warn('Error saving user profile:', e);
+  }
+}
+
+export function getHasVisitedLanding(): boolean {
+  try {
+    return sessionStorage.getItem(LANDING_VISITED_KEY) === 'true' || localStorage.getItem(LANDING_VISITED_KEY) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+export function setHasVisitedLanding(visited: boolean): void {
+  try {
+    sessionStorage.setItem(LANDING_VISITED_KEY, visited ? 'true' : 'false');
+    localStorage.setItem(LANDING_VISITED_KEY, visited ? 'true' : 'false');
+  } catch (e) {
+    console.warn('Error saving landing visited state:', e);
+  }
+}
+

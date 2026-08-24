@@ -1,10 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Home, 
   Flame, 
   Tv, 
   History, 
-  Clock, 
   ThumbsUp, 
   Music2, 
   Trophy, 
@@ -13,14 +12,14 @@ import {
   Flag, 
   Radio, 
   ChevronRight, 
-  ListVideo, 
   Sparkles, 
   Zap, 
   PlaySquare, 
   Calendar 
 } from 'lucide-react';
-import { ViewMode } from '../types';
+import { Video, ViewMode } from '../types';
 import { MOCK_CHANNELS } from '../data/mockVideos';
+import { getWatchLaterList } from '../services/sessionStorage';
 import { FadeImage } from './FadeImage';
 
 interface SidebarProps {
@@ -28,6 +27,7 @@ interface SidebarProps {
   activeView: ViewMode;
   onSelectView: (view: ViewMode) => void;
   onSelectCategory?: (category: string) => void;
+  onSelectVideo?: (video: Video) => void;
   selectedCategory?: string;
   isWatchPage?: boolean;
   onClose?: () => void;
@@ -38,9 +38,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeView,
   onSelectView,
   onSelectCategory,
+  onSelectVideo,
   isWatchPage = false,
   onClose
 }) => {
+  const [subscribedAnimes, setSubscribedAnimes] = useState<Video[]>([]);
+
+  useEffect(() => {
+    const syncSubscribed = () => {
+      setSubscribedAnimes(getWatchLaterList());
+    };
+    syncSubscribed();
+
+    window.addEventListener('anitube_storage_update', syncSubscribed);
+    return () => {
+      window.removeEventListener('anitube_storage_update', syncSubscribed);
+    };
+  }, []);
+
   const handleItemClick = (view: ViewMode) => {
     onSelectView(view);
     if (isWatchPage && onClose) {
@@ -78,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             activeView === 'popular' || activeView === 'trending' ? 'bg-[#272727] font-semibold text-white' : 'text-gray-300 hover:bg-[#222222]'
           }`}
         >
-          <Flame className="w-5 h-5 text-red-500 shrink-0" />
+          <Flame className="w-5 h-5 text-white shrink-0" />
           <div className="flex items-center justify-between flex-1 truncate">
             <span className="truncate">Popular & Trending</span>
             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-600 text-white ml-2 shrink-0">HOT</span>
@@ -156,25 +171,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           <Sparkles className="w-5 h-5 text-white shrink-0" />
-          <span className="truncate">Subscriptions</span>
-        </button>
-
-        <button
-          onClick={() => handleItemClick('library')}
-          className="flex items-center gap-4 w-full px-3 py-2.5 rounded-xl text-gray-300 hover:bg-[#222222] transition-colors cursor-pointer"
-        >
-          <ListVideo className="w-5 h-5 text-white shrink-0" />
-          <span className="truncate">Playlists</span>
-        </button>
-
-        <button
-          onClick={() => handleItemClick('watch_later')}
-          className={`flex items-center gap-4 w-full px-3 py-2.5 rounded-xl font-normal transition-colors cursor-pointer ${
-            activeView === 'watch_later' ? 'bg-[#272727] font-semibold text-white' : 'text-gray-300 hover:bg-[#222222]'
-          }`}
-        >
-          <Clock className="w-5 h-5 text-white shrink-0" />
-          <span className="truncate">Watch Later</span>
+          <span className="truncate">Subscribed</span>
         </button>
 
         <button
@@ -188,32 +185,86 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Section 3: Subscriptions List */}
+      {/* Section 3: Subscribed List */}
       <div className="py-3 border-b border-[#272727]">
-        <div className="px-3 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Channels
+        <div className="px-3 pb-2 flex items-center justify-between text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          <span>Subscribed</span>
+          {subscribedAnimes.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-[#2a2a2a] text-gray-300 text-[10px] font-bold">
+              {subscribedAnimes.length}
+            </span>
+          )}
         </div>
         <div className="space-y-0.5">
-          {MOCK_CHANNELS.map((channel) => (
-            <button
-              key={channel.id}
-              onClick={() => handleCategoryClick(channel.name)}
-              className="flex items-center justify-between w-full px-3 py-2 rounded-xl text-gray-300 hover:bg-[#222222] transition-colors group text-left cursor-pointer"
-            >
-              <div className="flex items-center gap-3 truncate">
-                <FadeImage
-                  src={channel.avatar}
-                  alt={channel.name}
-                  className="w-6 h-6 rounded-full object-cover shrink-0"
-                  containerClassName="w-6 h-6 rounded-full shrink-0"
-                />
-                <span className="text-xs truncate">{channel.name}</span>
-              </div>
-              {channel.id === 'ch-anitrack' && (
-                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse shrink-0" title="Streaming Live" />
-              )}
-            </button>
-          ))}
+          {/* User Subscribed Anime Series from Anime Detail Pages */}
+          {subscribedAnimes.length > 0 ? (
+            subscribedAnimes.map((anime) => (
+              <button
+                key={`sub-anime-${anime.id}`}
+                onClick={() => {
+                  if (onSelectVideo) {
+                    onSelectVideo(anime);
+                  } else {
+                    handleItemClick('subscriptions');
+                  }
+                  if (isWatchPage && onClose) {
+                    onClose();
+                  }
+                }}
+                className="flex items-center justify-between w-full px-3 py-2 rounded-xl text-gray-200 hover:bg-[#222222] transition-colors group text-left cursor-pointer"
+                title={anime.title}
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <FadeImage
+                    src={anime.poster || anime.thumbnail}
+                    alt={anime.title}
+                    className="w-7 h-7 rounded-lg object-cover shrink-0"
+                    containerClassName="w-7 h-7 rounded-lg shrink-0 overflow-hidden"
+                  />
+                  <div className="truncate">
+                    <div className="text-xs font-semibold truncate text-white group-hover:text-red-400 transition-colors">
+                      {anime.title}
+                    </div>
+                    <div className="text-[10px] text-gray-400 truncate">
+                      {anime.category || 'Anime'}
+                    </div>
+                  </div>
+                </div>
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" title="Subscribed Anime" />
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-1.5 text-[11px] text-gray-500 italic">
+              No subscribed anime yet
+            </div>
+          )}
+
+          {/* Subscribed Channels */}
+          <div className="pt-2 border-t border-[#222222] mt-2">
+            <div className="px-3 pb-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+              Featured Channels
+            </div>
+            {MOCK_CHANNELS.map((channel) => (
+              <button
+                key={channel.id}
+                onClick={() => handleCategoryClick(channel.name)}
+                className="flex items-center justify-between w-full px-3 py-1.5 rounded-xl text-gray-300 hover:bg-[#222222] transition-colors group text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <FadeImage
+                    src={channel.avatar}
+                    alt={channel.name}
+                    className="w-5 h-5 rounded-full object-cover shrink-0"
+                    containerClassName="w-5 h-5 rounded-full shrink-0"
+                  />
+                  <span className="text-xs truncate">{channel.name}</span>
+                </div>
+                {channel.id === 'ch-anitrack' && (
+                  <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse shrink-0" title="Streaming Live" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

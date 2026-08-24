@@ -32,7 +32,8 @@ import {
   isInWatchLater, 
   toggleWatchLater, 
   isEpisodeLiked, 
-  toggleLikedEpisode 
+  toggleLikedEpisode,
+  addToWatchHistory
 } from '../services/sessionStorage';
 
 interface WatchViewProps {
@@ -77,6 +78,7 @@ export const WatchView = ({
   const [animeInfo, setAnimeInfo] = useState<AnimeInfoData | null>(null);
   const [episodesMetadata, setEpisodesMetadata] = useState<AnimeEpisodeDetail[]>([]);
   const [metadataImages, setMetadataImages] = useState<any[]>([]);
+  const [isLoadingInfo, setIsLoadingInfo] = useState<boolean>(true);
 
   const activeEpisodeRef = useRef<HTMLDivElement | null>(null);
   const serverDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -164,7 +166,11 @@ export const WatchView = ({
     let isMounted = true;
     async function loadInfo() {
       const targetSlug = activeSlug || video.slug || video.id;
-      if (!targetSlug) return;
+      if (!targetSlug) {
+        setIsLoadingInfo(false);
+        return;
+      }
+      setIsLoadingInfo(true);
       try {
         const infoData = await fetchAnimeInfo(targetSlug);
         if (!isMounted) return;
@@ -188,6 +194,10 @@ export const WatchView = ({
         }
       } catch (err) {
         console.warn('Failed to load anime info:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingInfo(false);
+        }
       }
     }
 
@@ -366,7 +376,7 @@ export const WatchView = ({
 
     // Detect highest known count, defaulting to at least currentEpisode or 12
     const totalCount = Math.max(metaCount, parsedSub, parsedDub, parsedVideoEp, epArrayCount, currentEpisode, 12);
-    const countClamped = Math.min(Math.max(totalCount, 1), 100);
+    const countClamped = Math.min(Math.max(totalCount, 1), 2000);
 
     const defaultFallbackImage = animeBannerOrFanart || video.thumbnail;
 
@@ -427,20 +437,32 @@ export const WatchView = ({
     return allVideos.filter(v => v.id !== video.id);
   }, [allVideos, video.id]);
 
-  // YouTube formatted title: "{Anime Title} EP {Episode Number}: {Episode Title}"
+  // YouTube formatted title: "{Anime Title}: EP {Episode Number}: {Episode Title}"
   const baseAnimeTitle = (animeInfo?.title || video.title)
+    .replace(/:\s*EP\s*\d+/i, '')
     .replace(/\s*-\s*Episode\s*\d+/i, '')
     .replace(/\s*EP\s*\d+/i, '')
     .trim();
 
   const currentEpisodeData = episodesMetadata.find(ep => ep.number === currentEpisode);
   const episodeDetailSuffix = currentEpisodeData?.title ? `: ${currentEpisodeData.title}` : '';
-  const formattedMainTitle = `${baseAnimeTitle} EP ${currentEpisode}${episodeDetailSuffix}`;
+  const formattedMainTitle = `${baseAnimeTitle}: EP ${currentEpisode}${episodeDetailSuffix}`;
 
   // Current Episode Poster resolution (Episode image -> Detail Banner/Fanart -> Video thumbnail)
   const activeEpisodePoster = (currentEpisodeData?.image && currentEpisodeData.image.trim().length > 0)
     ? currentEpisodeData.image
     : (animeBannerOrFanart || video.thumbnail);
+
+  // Sync Watch History with thumbnail of last watched episode and episode number
+  useEffect(() => {
+    if (video && activeEpisodePoster) {
+      addToWatchHistory({
+        ...video,
+        thumbnail: activeEpisodePoster,
+        episodeNumber: currentEpisode,
+      });
+    }
+  }, [video, currentEpisode, activeEpisodePoster]);
 
   return (
     <div className="w-full max-w-[1780px] mx-auto px-2 sm:px-4 lg:px-6 py-4 bg-[#0f0f0f]">
@@ -519,7 +541,7 @@ export const WatchView = ({
                 {isSubscribed ? (
                   <>
                     <Bell className="w-3.5 h-3.5 fill-current" />
-                    <span>Subscribed (Watch Later)</span>
+                    <span>Subscribed</span>
                   </>
                 ) : (
                   <span>Subscribe</span>
@@ -791,8 +813,7 @@ export const WatchView = ({
           
           {/* Episode Queue Container */}
           <div className="bg-[#181818] border border-[#272727] rounded-xl overflow-hidden shadow-xl flex flex-col max-h-[calc(100vh-80px)]">
-            
-            {/* Episode Queue Header */}
+                 {/* Episode Queue Header */}
             <div className="p-3 bg-[#212121] border-b border-[#2a2a2a] flex items-center justify-between gap-2">
               <div>
                 <div className="flex items-center gap-2">
@@ -800,13 +821,21 @@ export const WatchView = ({
                   <h2 className="text-sm font-bold text-white">
                     Episodes
                   </h2>
-                  <span className="px-2 py-0.5 rounded-full bg-[#2e2e2e] text-white text-[10px] font-semibold">
-                    {resolvedEpisodes.length} Total
-                  </span>
+                  {isLoadingInfo ? (
+                    <div className="w-14 h-4 rounded-full bg-[#2e2e2e] animate-pulse" />
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-[#2e2e2e] text-white text-[10px] font-semibold">
+                      {resolvedEpisodes.length} Total
+                    </span>
+                  )}
                 </div>
-                <p className="text-[11px] text-[#aaaaaa] pt-0.5 truncate max-w-[220px]">
-                  Now Playing: Ep {currentEpisode}
-                </p>
+                {isLoadingInfo ? (
+                  <div className="w-24 h-2.5 rounded bg-[#2a2a2a] animate-pulse mt-1.5" />
+                ) : (
+                  <p className="text-[11px] text-[#aaaaaa] pt-0.5 truncate max-w-[220px]">
+                    Now Playing: Ep {currentEpisode}
+                  </p>
+                )}
               </div>
 
               {/* View Switcher (List / Grid) */}
@@ -839,107 +868,153 @@ export const WatchView = ({
             {/* Episode Scrollable List Area */}
             <div className="p-2.5 overflow-y-auto space-y-2 flex-1 scrollbar-thin scrollbar-thumb-[#333] scrollbar-track-transparent">
               
-              {/* List Mode with rich thumbnails, title and duration */}
-              {episodeViewMode === 'list' && (
-                resolvedEpisodes.map((ep) => {
-                  const isSelected = currentEpisode === ep.number;
-                  return (
+              {/* Skeleton Loader while Anime Info / Episode List metadata is loading */}
+              {isLoadingInfo ? (
+                episodeViewMode === 'list' ? (
+                  Array.from({ length: 6 }).map((_, idx) => (
                     <div
-                      key={ep.id || `ep-${ep.number}`}
-                      ref={isSelected ? activeEpisodeRef : null}
-                      onClick={() => setCurrentEpisode(ep.number)}
-                      className={`flex gap-3 p-2 rounded-xl cursor-pointer transition-all ${
-                        isSelected
-                          ? 'bg-[#272727] border border-[#444]'
-                          : 'bg-[#181818] border border-transparent hover:bg-[#222222]'
-                      }`}
+                      key={`ep-skeleton-${idx}`}
+                      className="flex gap-3 p-2 rounded-xl bg-[#181818] border border-[#272727]/60 animate-pulse select-none"
                     >
-                      {/* Thumbnail */}
-                      <div className="relative w-28 sm:w-32 aspect-video rounded-lg overflow-hidden bg-black shrink-0">
-                        <FadeImage
-                          src={ep.image || animeBannerOrFanart || video.thumbnail}
-                          alt={ep.title || `Episode ${ep.number}`}
-                          className="w-full h-full object-cover"
-                          containerClassName="w-full h-full"
-                          fallbackSrc={animeBannerOrFanart || video.thumbnail}
-                        />
-
-                        {/* Episode Number Pill */}
-                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/80 text-white">
-                          EP {ep.number}
-                        </span>
-
-                        {/* Duration */}
-                        {ep.duration && (
-                          <span className="absolute bottom-1.5 right-1.5 px-1 py-0.5 rounded text-[9px] font-medium bg-black/85 text-white">
-                            {ep.duration}m
-                          </span>
-                        )}
-
-                        {/* Playing Status Overlay - Pure Play Button Only */}
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-black/55 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
-                            <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center shadow-xl">
-                              <Play className="w-4 h-4 fill-black text-black ml-0.5" />
-                            </div>
-                          </div>
-                        )}
+                      {/* Thumbnail Skeleton */}
+                      <div className="relative w-28 sm:w-32 aspect-video rounded-lg bg-[#242424] shrink-0 overflow-hidden flex items-center justify-center">
+                        <div className="w-6 h-6 rounded-full bg-[#2e2e2e]" />
+                        <span className="absolute top-1.5 left-1.5 w-8 h-3.5 rounded bg-[#2e2e2e]" />
+                        <span className="absolute bottom-1.5 right-1.5 w-6 h-3 rounded bg-[#2e2e2e]" />
                       </div>
 
-                      {/* Text Metadata */}
-                      <div className="flex flex-col justify-between flex-1 min-w-0 py-0.5">
-                        <div>
-                          <div className="text-xs font-bold truncate text-white">
-                            EP {ep.number}: {ep.title || `Episode ${ep.number}`}
-                          </div>
-                          {ep.description && (
-                            <p className="text-[11px] text-[#aaaaaa] line-clamp-2 leading-tight pt-0.5">
-                              {ep.description}
-                            </p>
-                          )}
+                      {/* Content Skeleton */}
+                      <div className="flex flex-col justify-between flex-1 min-w-0 py-0.5 space-y-1.5">
+                        <div className="space-y-1.5">
+                          <div className="h-3.5 bg-[#2d2d2d] rounded w-3/4" />
+                          <div className="h-2.5 bg-[#222222] rounded w-full" />
+                          <div className="h-2.5 bg-[#222222] rounded w-4/5" />
                         </div>
-                        
-                        <div className="flex items-center gap-2 text-[10px] text-[#aaaaaa] pt-1">
-                          {ep.isFiller && (
-                            <span className="px-1.5 py-0.2 rounded bg-[#333] text-white font-semibold">
-                              Filler
-                            </span>
-                          )}
-                          {ep.airDate && (
-                            <span className="truncate">{formatRelativeTime(ep.airDate)}</span>
-                          )}
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className="h-2.5 bg-[#262626] rounded w-14" />
+                          <div className="h-2.5 bg-[#222222] rounded w-10" />
                         </div>
                       </div>
                     </div>
-                  );
-                })
-              )}
-
-              {/* Grid Mode with Quick Episode Buttons */}
-              {episodeViewMode === 'grid' && (
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                  {resolvedEpisodes.map((ep) => {
-                    const isSelected = currentEpisode === ep.number;
-                    return (
-                      <button
-                        key={ep.id || `grid-${ep.number}`}
-                        onClick={() => setCurrentEpisode(ep.number)}
-                        className={`p-2.5 rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-0.5 border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-white text-black border-white shadow'
-                            : 'bg-[#1e1e1e] border-[#2c2c2c] hover:bg-[#282828] text-white'
-                        }`}
-                        title={`Episode ${ep.number}${ep.title ? `: ${ep.title}` : ''}`}
+                  ))
+                ) : (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                    {Array.from({ length: 15 }).map((_, idx) => (
+                      <div
+                        key={`grid-skeleton-${idx}`}
+                        className="p-2.5 h-13 rounded-xl bg-[#1e1e1e] border border-[#282828] animate-pulse flex flex-col items-center justify-center gap-1"
                       >
-                        <div className="flex items-center gap-1">
-                          {isSelected && <Play className="w-2.5 h-2.5 fill-black text-black" />}
-                          <span className={`text-[10px] ${isSelected ? 'text-gray-700' : 'text-[#aaaaaa]'}`}>EP</span>
+                        <div className="w-5 h-2 bg-[#2d2d2d] rounded" />
+                        <div className="w-6 h-3.5 bg-[#333333] rounded" />
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <>
+                  {/* List Mode with rich thumbnails, title and duration */}
+                  {episodeViewMode === 'list' && (
+                    resolvedEpisodes.map((ep) => {
+                      const isSelected = currentEpisode === ep.number;
+                      return (
+                        <div
+                          key={ep.id || `ep-${ep.number}`}
+                          ref={isSelected ? activeEpisodeRef : null}
+                          onClick={() => setCurrentEpisode(ep.number)}
+                          className={`flex gap-3 p-2 rounded-xl cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-[#272727] border border-[#444]'
+                              : 'bg-[#181818] border border-transparent hover:bg-[#222222]'
+                          }`}
+                        >
+                          {/* Thumbnail */}
+                          <div className="relative w-28 sm:w-32 aspect-video rounded-lg overflow-hidden bg-black shrink-0">
+                            <FadeImage
+                              src={ep.image || animeBannerOrFanart || video.thumbnail}
+                              alt={ep.title || `Episode ${ep.number}`}
+                              className="w-full h-full object-cover"
+                              containerClassName="w-full h-full"
+                              fallbackSrc={animeBannerOrFanart || video.thumbnail}
+                            />
+
+                            {/* Episode Number Pill */}
+                            <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/80 text-white">
+                              EP {ep.number}
+                            </span>
+
+                            {/* Duration */}
+                            {ep.duration && (
+                              <span className="absolute bottom-1.5 right-1.5 px-1 py-0.5 rounded text-[9px] font-medium bg-black/85 text-white">
+                                {ep.duration}m
+                              </span>
+                            )}
+
+                            {/* Playing Status Overlay - Pure Play Button Only */}
+                            {isSelected && (
+                              <div className="absolute inset-0 bg-black/55 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+                                <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center shadow-xl">
+                                  <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Text Metadata */}
+                          <div className="flex flex-col justify-between flex-1 min-w-0 py-0.5">
+                            <div>
+                              <div className="text-xs font-bold truncate text-white">
+                                EP {ep.number}: {ep.title || `Episode ${ep.number}`}
+                              </div>
+                              {ep.description && (
+                                <p className="text-[11px] text-[#aaaaaa] line-clamp-2 leading-tight pt-0.5">
+                                  {ep.description}
+                                </p>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center gap-2 text-[10px] text-[#aaaaaa] pt-1">
+                              {ep.isFiller && (
+                                <span className="px-1.5 py-0.2 rounded bg-[#333] text-white font-semibold">
+                                  Filler
+                                </span>
+                              )}
+                              {ep.airDate && (
+                                <span className="truncate">{formatRelativeTime(ep.airDate)}</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <span className="text-sm font-black">{ep.number}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                      );
+                    })
+                  )}
+
+                  {/* Grid Mode with Quick Episode Buttons */}
+                  {episodeViewMode === 'grid' && (
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                      {resolvedEpisodes.map((ep) => {
+                        const isSelected = currentEpisode === ep.number;
+                        return (
+                          <button
+                            key={ep.id || `grid-${ep.number}`}
+                            onClick={() => setCurrentEpisode(ep.number)}
+                            className={`p-2.5 rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-0.5 border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-white text-black border-white shadow'
+                                : 'bg-[#1e1e1e] border-[#2c2c2c] hover:bg-[#282828] text-white'
+                            }`}
+                            title={`Episode ${ep.number}${ep.title ? `: ${ep.title}` : ''}`}
+                          >
+                            <div className="flex items-center gap-1">
+                              {isSelected && <Play className="w-2.5 h-2.5 fill-black text-black" />}
+                              <span className={`text-[10px] ${isSelected ? 'text-gray-700' : 'text-[#aaaaaa]'}`}>EP</span>
+                            </div>
+                            <span className="text-sm font-black">{ep.number}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
