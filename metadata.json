@@ -1,0 +1,6 @@
+{
+  "name": "AniTube",
+  "description": "YouTube-inspired anime video streaming UI in dark mode with Video.js HLS playback",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
