@@ -11,7 +11,7 @@
     },
     {
       "source": "/api/recent-anime",
-      "destination": "https://anikoto-api.vercel.app/api/latest-episodes"
+      "destination": "https://anikotoapi.site/recent-anime"
     },
     {
       "source": "/api/anime/category/:cat",

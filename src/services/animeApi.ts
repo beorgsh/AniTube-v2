@@ -688,6 +688,45 @@ export async function fetchAnimeStreamByMalId(
 }
 
 /**
+ * Helper to parse/extract a numeric MAL ID from an anime details response object.
+ */
+export function extractMalIdFromInfo(infoData: any): number | undefined {
+  if (!infoData) return undefined;
+
+  // 1. Direct mal_id / malId property
+  if (typeof infoData.malId === 'number' && infoData.malId > 0) return infoData.malId;
+  if (typeof infoData.mal_id === 'number' && infoData.mal_id > 0) return infoData.mal_id;
+  if (typeof infoData.malId === 'string' && /^\d+$/.test(infoData.malId)) return Number(infoData.malId);
+  if (typeof infoData.mal_id === 'string' && /^\d+$/.test(infoData.mal_id)) return Number(infoData.mal_id);
+
+  // 2. mal array or string (e.g. ["https://myanimelist.net/anime/21/One_Piece"] or ["21"])
+  if (Array.isArray(infoData.mal) && infoData.mal.length > 0) {
+    for (const entry of infoData.mal) {
+      if (typeof entry === 'number' && entry > 0) return entry;
+      if (typeof entry === 'string') {
+        const match = entry.match(/\/anime\/(\d+)/) || entry.match(/^(\d+)$/);
+        if (match && match[1]) return Number(match[1]);
+      }
+    }
+  } else if (typeof infoData.mal === 'string') {
+    const match = infoData.mal.match(/\/anime\/(\d+)/) || infoData.mal.match(/^(\d+)$/);
+    if (match && match[1]) return Number(match[1]);
+  } else if (typeof infoData.mal === 'number' && infoData.mal > 0) {
+    return infoData.mal;
+  }
+
+  // 3. Check anilistId / al_id if numeric
+  if (typeof infoData.anilistId === 'number' && infoData.anilistId > 0) return infoData.anilistId;
+  if (typeof infoData.al_id === 'number' && infoData.al_id > 0) return infoData.al_id;
+
+  // 4. Check infoData.id if numeric
+  if (typeof infoData.id === 'number' && infoData.id > 0) return infoData.id;
+  if (typeof infoData.id === 'string' && /^\d+$/.test(infoData.id)) return Number(infoData.id);
+
+  return undefined;
+}
+
+/**
  * Universal stream resolver: accepts MAL ID and/or Slug, automatically resolving
  * the best HLS stream with hd-1/hd-2 server fallback and English subtitle track.
  */
@@ -710,25 +749,57 @@ export async function fetchAnimeStream({
     : undefined;
 
   const finalSlug = cleanSlug || (rawMalIdStr && !/^\d+$/.test(rawMalIdStr) ? rawMalIdStr : undefined);
-  const numericMalId = rawMalIdStr && /^\d+$/.test(rawMalIdStr) ? Number(rawMalIdStr) : undefined;
+  let numericMalId = rawMalIdStr && /^\d+$/.test(rawMalIdStr) ? Number(rawMalIdStr) : undefined;
 
+  let lastError: Error | null = null;
+
+  // 1. IF MAL ID IS AVAILABLE (e.g. Home list returns mal_id), TRY MAL ID API FIRST
   if (numericMalId) {
     try {
-      return await fetchAnimeStreamByMalId(numericMalId, episode, finalSlug);
-    } catch (malErr) {
-      if (finalSlug) {
-        return await fetchAnimeStreamBySlug(finalSlug, episode, preferredServer);
+      const malStream = await fetchAnimeStreamByMalId(numericMalId, episode, finalSlug);
+      if (malStream && malStream.streamUrl) {
+        return malStream;
       }
-      throw malErr;
+    } catch (malErr: any) {
+      console.warn(`Primary MAL Stream API failed for MAL ID ${numericMalId}:`, malErr?.message);
+      lastError = malErr;
     }
   }
 
+  // 2. IF MAL ID FAILED OR WAS NOT RETURNED IN JSON (e.g. Reels list where json name is id = slug), TRY SLUG BASE API
   const targetSlug = finalSlug || rawMalIdStr || '';
-  if (!targetSlug) {
-    throw new Error('Either MAL ID or Anime Slug is required to fetch a stream');
+  if (targetSlug) {
+    try {
+      const slugStream = await fetchAnimeStreamBySlug(targetSlug, episode, preferredServer);
+      if (slugStream && slugStream.streamUrl) {
+        return slugStream;
+      }
+    } catch (slugErr: any) {
+      console.warn(`Slug Stream API failed for slug "${targetSlug}":`, slugErr?.message);
+      lastError = slugErr;
+    }
   }
 
-  return await fetchAnimeStreamBySlug(targetSlug, episode, preferredServer);
+  // 3. PLAYER ERROR RETRY TEST: If both above failed or only slug was given, fetch Anime Details to get the official MAL ID returned in details!
+  if (targetSlug) {
+    try {
+      console.info(`Attempting fallback: fetching anime details for "${targetSlug}" to extract MAL ID...`);
+      const infoData = await fetchAnimeInfo(targetSlug);
+      const discoveredMalId = extractMalIdFromInfo(infoData);
+
+      if (discoveredMalId && discoveredMalId !== numericMalId) {
+        console.info(`Discovered MAL ID ${discoveredMalId} from anime details. Retrying MAL Stream API...`);
+        const retryMalStream = await fetchAnimeStreamByMalId(discoveredMalId, episode, targetSlug);
+        if (retryMalStream && retryMalStream.streamUrl) {
+          return retryMalStream;
+        }
+      }
+    } catch (infoErr: any) {
+      console.warn(`Anime details lookup retry for "${targetSlug}" failed:`, infoErr?.message);
+    }
+  }
+
+  throw new Error(lastError?.message || `Unable to fetch video stream for episode ${episode}`);
 }
 
 /**
@@ -745,8 +816,12 @@ export function transformAnikotoCategoryItemToVideo(
   // Use the REAL anime poster image for both thumbnail and channel avatar
   const realPoster = item.image || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
 
+  const rawItemId = String(item.id || '').replace(/^slug-/, '').replace(/^anime-/, '').trim();
+  const numericMalId = (item as any).mal_id || (item as any).malId || (/^\d+$/.test(rawItemId) ? Number(rawItemId) : undefined);
+  const slugStr = (item as any).slug || (!/^\d+$/.test(rawItemId) ? rawItemId : rawItemId);
+
   const channel: Channel = {
-    id: `ch-slug-${item.id}`,
+    id: `ch-slug-${rawItemId}`,
     name: `${cleanTitle} Studio`,
     avatar: realPoster, // REAL poster image used as avatar
     subscribers: `${(Math.random() * 3.5 + 1.1).toFixed(2)}M`,
@@ -777,8 +852,9 @@ export function transformAnikotoCategoryItemToVideo(
   ].filter(Boolean);
 
   return {
-    id: `slug-${item.id}`,
-    slug: item.id,
+    id: `slug-${rawItemId}`,
+    malId: numericMalId,
+    slug: slugStr,
     title: formattedTitle,
     description: `${cleanTitle} (${animeType})\n\nCategory: ${categoryLabel}\nEpisodes: ${totalEpisodes}\nSubbed: ${item.sub || 'Available'} | Dubbed: ${item.dub || 'None'}\n\nStream full episodes directly with automatic HLS video playback and synchronized English subtitles.`,
     thumbnail: realPoster,
@@ -789,7 +865,7 @@ export function transformAnikotoCategoryItemToVideo(
     viewsCount,
     uploadedAt: 'Updated recently',
     channel,
-    streamUrl: '', // dynamically streamed via fetchAnimeStreamBySlug
+    streamUrl: '', // dynamically streamed via fetchAnimeStream
     category: categoryLabel,
     tags,
     likes: `${(viewsCount * 0.08 / 1000).toFixed(1)}K`,
@@ -797,7 +873,7 @@ export function transformAnikotoCategoryItemToVideo(
     commentsCount: `${Math.floor(viewsCount * 0.004) + 24}`,
     comments: [
       {
-        id: `c-slug-${item.id}-1`,
+        id: `c-slug-${rawItemId}-1`,
         author: 'AnimeLover99',
         avatar: realPoster,
         timeAgo: '1 hour ago',

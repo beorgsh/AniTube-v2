@@ -14,7 +14,9 @@ import {
   List,
   ChevronDown,
   ChevronUp,
-  Server as ServerIcon
+  Server as ServerIcon,
+  Sliders,
+  RefreshCw
 } from 'lucide-react';
 import { Video, SubtitleTrack, StreamSource, SkipInterval, AnimeInfoData, AnimeEpisodeDetail, AnimeSeasonItem } from '../types';
 import { VideoPlayer } from './VideoPlayer';
@@ -23,9 +25,11 @@ import { FadeImage, VerifiedBadge } from './FadeImage';
 import { 
   fetchAnimeStream, 
   fetchAnimeStreamBySlug, 
+  fetchAnimeStreamByMalId,
   buildProxiedM3u8Url, 
   fetchAnimeInfo, 
-  fetchAnimeEpisodesMetadata 
+  fetchAnimeEpisodesMetadata,
+  extractMalIdFromInfo
 } from '../services/animeApi';
 import { formatRelativeTime } from '../services/timeUtils';
 import { 
@@ -80,8 +84,15 @@ export const WatchView = ({
   const [metadataImages, setMetadataImages] = useState<any[]>([]);
   const [isLoadingInfo, setIsLoadingInfo] = useState<boolean>(true);
 
+  // Stream Settings & Manual MAL ID / Slug Override State
+  const [isStreamSettingsOpen, setIsStreamSettingsOpen] = useState(false);
+  const [streamMode, setStreamMode] = useState<'auto' | 'mal' | 'slug'>('auto');
+  const [customMalId, setCustomMalId] = useState<string>(video.malId ? String(video.malId) : '');
+  const [customSlug, setCustomSlug] = useState<string>(activeSlug || video.slug || '');
+  
   const activeEpisodeRef = useRef<HTMLDivElement | null>(null);
   const serverDropdownRef = useRef<HTMLDivElement | null>(null);
+  const streamSettingsRef = useRef<HTMLDivElement | null>(null);
   const toastTimeoutRef = useRef<any>(null);
 
   const showToast = (msg: string) => {
@@ -92,16 +103,87 @@ export const WatchView = ({
     }, 3000);
   };
 
-  // Close server dropdown when clicking outside
+  // Sync custom input fields with active video & animeInfo
+  useEffect(() => {
+    if (video.malId) {
+      setCustomMalId(String(video.malId));
+    }
+    if (video.slug || activeSlug) {
+      setCustomSlug(activeSlug || video.slug || '');
+    }
+  }, [video.id, video.malId, video.slug, activeSlug]);
+
+  useEffect(() => {
+    if (animeInfo) {
+      const discovered = extractMalIdFromInfo(animeInfo);
+      if (discovered && (!customMalId || customMalId === 'undefined')) {
+        setCustomMalId(String(discovered));
+      }
+    }
+  }, [animeInfo]);
+
+  // Close server and stream settings dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (serverDropdownRef.current && !serverDropdownRef.current.contains(event.target as Node)) {
         setIsServerDropdownOpen(false);
       }
+      if (streamSettingsRef.current && !streamSettingsRef.current.contains(event.target as Node)) {
+        setIsStreamSettingsOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Manual Stream Reload with Custom MAL ID / Slug or Engine Mode
+  const handleReloadStream = async (overrideMode?: 'auto' | 'mal' | 'slug', overrideMalId?: string, overrideSlug?: string) => {
+    const modeToUse = overrideMode || streamMode;
+    const malIdToUse = (overrideMalId !== undefined ? overrideMalId : customMalId).trim();
+    const slugToUse = (overrideSlug !== undefined ? overrideSlug : customSlug).trim();
+
+    setCurrentStreamUrl('');
+    setIsLoadingStream(true);
+    setStreamError(null);
+    setIsStreamSettingsOpen(false);
+
+    try {
+      let streamData: any;
+
+      if (modeToUse === 'mal' && malIdToUse && /^\d+$/.test(malIdToUse)) {
+        streamData = await fetchAnimeStreamByMalId(Number(malIdToUse), currentEpisode, slugToUse);
+      } else if (modeToUse === 'slug' && slugToUse) {
+        streamData = await fetchAnimeStreamBySlug(slugToUse, currentEpisode, 'hd-1');
+      } else {
+        streamData = await fetchAnimeStream({
+          malId: malIdToUse || undefined,
+          slug: slugToUse || undefined,
+          episode: currentEpisode,
+          preferredServer: 'hd-1',
+        });
+      }
+
+      if (streamData && streamData.streamUrl) {
+        setCurrentStreamUrl(streamData.streamUrl);
+        setSubtitles(streamData.subtitles || []);
+        setServers(streamData.servers || []);
+        setActiveServerIndex(0);
+        setCurrentIntro(streamData.intro);
+        setCurrentOutro(streamData.outro);
+        if (streamData.slug) setActiveSlug(streamData.slug);
+        setSourceType(streamData.sourceType || (modeToUse === 'slug' ? 'slug' : 'mal'));
+        setStreamError(null);
+        showToast(`Stream reloaded (${modeToUse.toUpperCase()} Engine)`);
+      } else {
+        throw new Error('No valid stream URL returned.');
+      }
+    } catch (err: any) {
+      console.warn('Manual stream reload error:', err);
+      setStreamError(err?.message || 'Failed to fetch stream with specified settings.');
+    } finally {
+      setIsLoadingStream(false);
+    }
+  };
 
   // Sync Watch Later & Liked state from session storage on mount or video/episode switch
   useEffect(() => {
@@ -175,6 +257,30 @@ export const WatchView = ({
         const infoData = await fetchAnimeInfo(targetSlug);
         if (!isMounted) return;
         setAnimeInfo(infoData);
+
+        // If player previously had a stream error, check if anime detail returned a valid MAL ID to retry stream
+        const discoveredMalId = extractMalIdFromInfo(infoData);
+        if (discoveredMalId && streamError) {
+          try {
+            const retryData = await fetchAnimeStream({
+              malId: discoveredMalId,
+              slug: targetSlug,
+              episode: currentEpisode,
+            });
+            if (isMounted && retryData && retryData.streamUrl) {
+              setCurrentStreamUrl(retryData.streamUrl);
+              setSubtitles(retryData.subtitles);
+              setServers(retryData.servers);
+              setActiveServerIndex(0);
+              setCurrentIntro(retryData.intro);
+              setCurrentOutro(retryData.outro);
+              setSourceType(retryData.sourceType || 'mal');
+              setStreamError(null);
+            }
+          } catch (retryErr) {
+            console.warn('Retry stream with anime detail MAL ID failed:', retryErr);
+          }
+        }
 
         const anilistId = infoData.anilistId || video.aniId;
         if (anilistId) {
@@ -494,11 +600,33 @@ export const WatchView = ({
             />
           </div>
 
-          {/* Stream Error Notification */}
+          {/* Stream Error Notification with Quick Retry Buttons */}
           {streamError && (
-            <div className="p-3 bg-[#1e1e1e] border border-[#333] rounded-xl flex items-center gap-3 text-xs text-white">
-              <AlertCircle className="w-4 h-4 text-white shrink-0" />
-              <span>{streamError}</span>
+            <div className="p-3 bg-[#1e1e1e] border border-[#333] rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-white">
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 text-white shrink-0" />
+                <span>{streamError}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  onClick={() => handleReloadStream('mal')}
+                  className="px-2.5 py-1 bg-[#2b2b2b] hover:bg-[#383838] rounded text-[11px] font-medium text-white transition-colors cursor-pointer"
+                >
+                  Try MAL ID
+                </button>
+                <button
+                  onClick={() => handleReloadStream('slug')}
+                  className="px-2.5 py-1 bg-[#2b2b2b] hover:bg-[#383838] rounded text-[11px] font-medium text-white transition-colors cursor-pointer"
+                >
+                  Try Slug
+                </button>
+                <button
+                  onClick={() => setIsStreamSettingsOpen(true)}
+                  className="px-2.5 py-1 bg-white text-black hover:bg-gray-200 rounded text-[11px] font-semibold transition-colors cursor-pointer"
+                >
+                  Edit Options
+                </button>
+              </div>
             </div>
           )}
 
@@ -587,7 +715,7 @@ export const WatchView = ({
                   <button
                     onClick={() => setIsServerDropdownOpen(!isServerDropdownOpen)}
                     id="btn-server-dropdown"
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-white text-xs font-semibold transition-colors shrink-0"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-white text-xs font-semibold transition-colors shrink-0 cursor-pointer"
                   >
                     <ServerIcon className="w-3.5 h-3.5 text-white" />
                     <span>Server: {servers[activeServerIndex]?.serverName || 'HD-1'}</span>
@@ -620,6 +748,129 @@ export const WatchView = ({
                   )}
                 </div>
               )}
+
+              {/* Stream Settings / MAL ID Override Popover Button */}
+              <div className="relative z-50" ref={streamSettingsRef}>
+                <button
+                  onClick={() => setIsStreamSettingsOpen(!isStreamSettingsOpen)}
+                  id="btn-stream-settings"
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
+                    isStreamSettingsOpen ? 'bg-white text-black' : 'bg-[#272727] hover:bg-[#3f3f3f] text-white'
+                  }`}
+                  title="Stream Options & MAL ID Settings"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Stream Options</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isStreamSettingsOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Stream Settings Dropdown Panel */}
+                {isStreamSettingsOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#212121] border border-[#3e3e3e] rounded-xl shadow-2xl p-3.5 z-50 text-xs text-white space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#333] pb-2 font-semibold">
+                      <span className="flex items-center gap-1.5 text-sm">
+                        <Sliders className="w-4 h-4 text-white" />
+                        Stream Source Settings
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#333] text-gray-300">
+                        {sourceType === 'mal' ? 'MAL ID' : 'Slug Engine'}
+                      </span>
+                    </div>
+
+                    {/* Engine Mode Selection */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-400 font-medium">Stream Priority Mode:</label>
+                      <div className="grid grid-cols-3 gap-1 bg-[#181818] p-1 rounded-lg">
+                        <button
+                          onClick={() => setStreamMode('auto')}
+                          className={`py-1.5 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            streamMode === 'auto' ? 'bg-white text-black font-bold' : 'text-gray-300 hover:text-white'
+                          }`}
+                        >
+                          Auto
+                        </button>
+                        <button
+                          onClick={() => setStreamMode('mal')}
+                          className={`py-1.5 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            streamMode === 'mal' ? 'bg-white text-black font-bold' : 'text-gray-300 hover:text-white'
+                          }`}
+                        >
+                          MAL ID
+                        </button>
+                        <button
+                          onClick={() => setStreamMode('slug')}
+                          className={`py-1.5 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            streamMode === 'slug' ? 'bg-white text-black font-bold' : 'text-gray-300 hover:text-white'
+                          }`}
+                        >
+                          Slug
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* MAL ID & Slug Input Fields */}
+                    <div className="space-y-2 pt-1">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[11px] text-gray-400 font-medium">MAL ID (Numeric MyAnimeList ID):</label>
+                          {customMalId && (
+                            <span className="text-[10px] text-emerald-400 font-mono">Active #{customMalId}</span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          value={customMalId}
+                          onChange={(e) => setCustomMalId(e.target.value)}
+                          placeholder="e.g. 21"
+                          className="w-full px-2.5 py-1.5 bg-[#141414] border border-[#3a3a3a] rounded text-white text-xs focus:outline-none focus:border-white font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[11px] text-gray-400 font-medium">Anime Slug:</label>
+                          {customSlug && (
+                            <span className="text-[10px] text-sky-400 font-mono">{customSlug}</span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          value={customSlug}
+                          onChange={(e) => setCustomSlug(e.target.value)}
+                          placeholder="e.g. one-piece"
+                          className="w-full px-2.5 py-1.5 bg-[#141414] border border-[#3a3a3a] rounded text-white text-xs focus:outline-none focus:border-white font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="pt-2 border-t border-[#333] flex flex-col gap-1.5">
+                      <button
+                        onClick={() => handleReloadStream(streamMode, customMalId, customSlug)}
+                        className="w-full py-2 bg-white text-black hover:bg-gray-200 rounded-lg font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Apply & Reload Stream
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          onClick={() => handleReloadStream('mal', customMalId, customSlug)}
+                          className="py-1.5 px-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white rounded text-[11px] font-medium transition-colors cursor-pointer text-center"
+                        >
+                          Try MAL ID
+                        </button>
+                        <button
+                          onClick={() => handleReloadStream('slug', customMalId, customSlug)}
+                          className="py-1.5 px-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white rounded text-[11px] font-medium transition-colors cursor-pointer text-center"
+                        >
+                          Try Slug
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
