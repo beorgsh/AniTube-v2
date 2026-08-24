@@ -20,6 +20,7 @@ interface HeaderProps {
   onSelectVideoById?: (id: string) => void;
   onOpenVoiceModal: () => void;
   onHomeClick: () => void;
+  onLogoClick?: () => void;
   userProfile?: UserProfile;
   onOpenAvatarModal?: () => void;
 }
@@ -30,6 +31,7 @@ export const Header = ({
   onSearchChange,
   onOpenVoiceModal,
   onHomeClick,
+  onLogoClick,
   userProfile,
   onOpenAvatarModal,
 }: HeaderProps) => {
@@ -68,10 +70,10 @@ export const Header = ({
 
         {/* Brand Logo */}
         <div 
-          onClick={onHomeClick}
+          onClick={onLogoClick || onHomeClick}
           id="btn-brand-logo"
           className="flex items-center gap-1.5 cursor-pointer group"
-          title="AniTube Home"
+          title="AniTube Landing Page / Home"
         >
           <div className="relative flex items-center justify-center w-8 h-6 rounded-md bg-[#ff0000] text-white group-hover:scale-105 transition-transform shadow-md shadow-red-900/30">
             {/* Play triangle */}

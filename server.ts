@@ -76,6 +76,94 @@ async function startServer() {
     res.redirect('/api/anime/category/completed');
   });
 
+  // Proxy for Recent Anime with fallback to latest-episodes / popular
+  app.get('/api/recent-anime', async (req, res) => {
+    const page = parseInt((req.query.page as string) || '1', 10);
+    const perPage = parseInt((req.query.per_page as string) || '10', 10);
+
+    // 1. Try Primary API (anikotoapi.site)
+    try {
+      const primaryUrl = `https://anikotoapi.site/recent-anime?page=${page}&per_page=${perPage}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const primaryRes = await fetch(primaryUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        },
+      });
+      clearTimeout(timeoutId);
+
+      if (primaryRes.ok) {
+        const data = await primaryRes.json();
+        if (data && data.ok && Array.isArray(data.data)) {
+          return res.json(data);
+        }
+      }
+    } catch (err) {
+      console.warn('Primary recent-anime endpoint failed or timed out, trying fallback...');
+    }
+
+    // 2. Fallback to Anikoto latest-episodes API
+    try {
+      const fallbackUrl = `https://anikoto-api.vercel.app/api/latest-episodes`;
+      const fbRes = await fetch(fallbackUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (fbRes.ok) {
+        const fbData = await fbRes.json();
+        if (fbData && fbData.success && Array.isArray(fbData.data)) {
+          // Normalize AnikotoCategoryItem to AnikotoAnime structure
+          const normalizedAnime = fbData.data.map((item: any, idx: number) => {
+            const epNum = item.episodes ? parseInt(item.episodes, 10) : 1;
+            return {
+              id: item.id || `latest-${idx}`,
+              title: item.title || 'Live Anime',
+              slug: item.id ? String(item.id).replace(/^slug-/, '') : '',
+              poster: item.image,
+              background_image: item.image,
+              is_sub: item.sub ? 1 : 0,
+              is_dub: item.dub ? 1 : 0,
+              description: item.title ? `${item.title} - Currently airing episode streaming in HD on AniTube.` : '',
+              status: 'Currently Airing',
+              episodes: item.episodes || String(epNum),
+              updated_at: new Date().toISOString(),
+              terms_by_type: {
+                type: [item.type || 'TV'],
+              },
+            };
+          });
+
+          // Paginate results
+          const startIndex = (page - 1) * perPage;
+          const paginated = normalizedAnime.slice(startIndex, startIndex + perPage);
+
+          return res.json({
+            ok: true,
+            data: paginated.length > 0 ? paginated : normalizedAnime.slice(0, perPage),
+            pagination: {
+              page,
+              per_page: perPage,
+              total: normalizedAnime.length,
+              total_pages: Math.ceil(normalizedAnime.length / perPage) || 1,
+            },
+            source: 'latest-episodes-fallback',
+          });
+        }
+      }
+    } catch (fbErr) {
+      console.error('Fallback recent-anime failed:', fbErr);
+    }
+
+    res.status(500).json({ ok: false, error: 'Failed to load recent anime' });
+  });
+
   // Proxy for search
   app.get('/api/anime/search', async (req, res) => {
     const { keyword, page = '1' } = req.query;

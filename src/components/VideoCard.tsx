@@ -36,12 +36,6 @@ export const VideoCard = ({
           <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tight bg-black/80 text-white z-10">
             {video.duration}
           </div>
-          {video.isLive && (
-            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-[#cc0000] text-white uppercase flex items-center gap-1 z-10">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-              LIVE
-            </div>
-          )}
         </div>
 
         {/* Video Info */}
@@ -91,17 +85,10 @@ export const VideoCard = ({
           </div>
         )}
 
-        {/* Duration badge or LIVE badge */}
-        {video.isLive ? (
-          <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[11px] font-bold bg-[#cc0000] text-white flex items-center gap-1.5 shadow-md z-10">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            LIVE
-          </div>
-        ) : (
-          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md text-xs font-semibold bg-black/85 text-white tracking-wide shadow-md z-10">
-            {video.duration}
-          </div>
-        )}
+        {/* Duration badge */}
+        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md text-xs font-semibold bg-black/85 text-white tracking-wide shadow-md z-10">
+          {video.duration}
+        </div>
 
         {/* HLS .m3u8 indicator */}
         <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/70 backdrop-blur-sm text-gray-300 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-10">

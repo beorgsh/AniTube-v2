@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Check, Sparkles, RefreshCw, ArrowRight, ShieldCheck, Wand2 } from 'lucide-react';
+import { User, Check, Sparkles, RefreshCw, ArrowRight, ShieldCheck, Wand2, Palette } from 'lucide-react';
 import { UserProfile, saveUserProfile, setHasVisitedLanding } from '../services/sessionStorage';
 
 interface AvatarSetupModalProps {
@@ -15,6 +15,31 @@ interface AvatarStyleOption {
   category: 'Illustrated & Cartoon' | 'Gaming & Retro' | 'Minimalist & Artistic';
   description: string;
 }
+
+const AVATAR_BG_COLORS = [
+  'b6e3f4', // Soft Sky Blue
+  'c0aede', // Soft Lavender
+  'd1d4f9', // Periwinkle
+  'ffd5dc', // Pastel Pink
+  'ffdfbf', // Peach
+  'fdba74', // Soft Amber
+  'fef08a', // Pastel Yellow
+  'a7f3d0', // Mint Green
+  'bae6fd', // Ice Blue
+  'c7d2fe', // Soft Indigo
+  'fbcfe8', // Bubblegum Pink
+  '38bdf8', // Electric Cyan
+  '818cf8', // Bright Violet
+  'f472b6', // Neon Pink
+  'fb7185', // Coral Red
+  '10b981', // Emerald
+  'f59e0b', // Golden Amber
+  '6366f1', // Indigo
+  'ec4899', // Hot Pink
+  '14b8a6', // Teal
+  '1e293b', // Slate Dark
+  '311b92', // Deep Purple
+];
 
 const AVATAR_STYLES: AvatarStyleOption[] = [
   // 1. Illustrated & Cartoon
@@ -87,6 +112,14 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
   const [name, setName] = useState(currentProfile.name || 'Otaku Explorer');
   const [username, setUsername] = useState(currentProfile.username || 'otaku_master');
   const [selectedStyle, setSelectedStyle] = useState<string>(currentProfile.avatarStyle || 'lorelei');
+  const [bgColor, setBgColor] = useState<string>(() => {
+    if (currentProfile.avatarBgColor) return currentProfile.avatarBgColor;
+    if (currentProfile.avatarUrl) {
+      const match = currentProfile.avatarUrl.match(/backgroundColor=([a-fA-F0-9]+)/);
+      if (match) return match[1];
+    }
+    return 'b6e3f4';
+  });
   const [randomSeed, setRandomSeed] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -96,6 +129,12 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
       setName(currentProfile.name || 'Otaku Explorer');
       setUsername(currentProfile.username || 'otaku_master');
       setSelectedStyle(currentProfile.avatarStyle || 'lorelei');
+      if (currentProfile.avatarBgColor) {
+        setBgColor(currentProfile.avatarBgColor);
+      } else if (currentProfile.avatarUrl) {
+        const match = currentProfile.avatarUrl.match(/backgroundColor=([a-fA-F0-9]+)/);
+        if (match) setBgColor(match[1]);
+      }
     }
   }, [isOpen, currentProfile]);
 
@@ -104,16 +143,18 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
   // Active seed is based on username (cleaned) + optional random variation
   const activeSeed = `${username.trim() || 'otaku'}${randomSeed > 0 ? `_${randomSeed}` : ''}`;
 
-  // Helper to build DiceBear API URL according to request format:
-  // https://api.dicebear.com/9.x/{style}/png?seed={username}
-  const getAvatarUrl = (styleId: string, seed: string) => {
-    return `https://api.dicebear.com/9.x/${styleId}/png?seed=${encodeURIComponent(seed)}`;
+  // Helper to build DiceBear API URL with background color parameter:
+  // https://api.dicebear.com/9.x/{style}/png?seed={username}&backgroundColor={hex}
+  const getAvatarUrl = (styleId: string, seed: string, colorHex: string) => {
+    return `https://api.dicebear.com/9.x/${styleId}/png?seed=${encodeURIComponent(seed)}&backgroundColor=${colorHex}`;
   };
 
-  const selectedAvatarUrl = getAvatarUrl(selectedStyle, activeSeed);
+  const selectedAvatarUrl = getAvatarUrl(selectedStyle, activeSeed, bgColor);
 
   const handleRandomize = () => {
     setRandomSeed((prev) => prev + 1);
+    const randomColor = AVATAR_BG_COLORS[Math.floor(Math.random() * AVATAR_BG_COLORS.length)];
+    setBgColor(randomColor);
   };
 
   const handleSave = () => {
@@ -123,6 +164,7 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
       username: username.trim() || 'otaku_master',
       avatarUrl: selectedAvatarUrl,
       avatarStyle: selectedStyle,
+      avatarBgColor: bgColor,
     };
 
     saveUserProfile(newProfile);
@@ -155,15 +197,18 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
             Create Your Anime Avatar
           </h2>
           <p className="text-xs sm:text-sm text-gray-400 max-w-lg mx-auto">
-            Type your username to dynamically generate custom avatars using the DiceBear API. Select your favorite style to place in your avatar placeholder!
+            Type your username to dynamically generate custom avatars with colorful backgrounds using the DiceBear API.
           </p>
         </div>
 
         {/* Selected Avatar Placeholder Box & Name Inputs */}
         <div className="flex flex-col sm:flex-row items-center gap-6 p-4 sm:p-5 bg-[#1a1a1a] border border-[#2e2e2e] rounded-2xl shadow-inner">
           {/* Avatar Placeholder View */}
-          <div className="relative group shrink-0">
-            <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-[#242424] border-2 border-red-500/80 shadow-xl shadow-red-900/20 flex items-center justify-center p-2 transition-transform duration-300 transform hover:scale-105">
+          <div className="relative group shrink-0 flex flex-col items-center">
+            <div 
+              className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden border-2 border-red-500/80 shadow-xl shadow-red-900/20 flex items-center justify-center p-2 transition-all duration-300 transform hover:scale-105"
+              style={{ backgroundColor: `#${bgColor}` }}
+            >
               <img
                 src={selectedAvatarUrl}
                 alt="Selected Avatar Preview"
@@ -178,15 +223,15 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
               onClick={handleRandomize}
               type="button"
               className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#272727] hover:bg-[#333333] active:scale-95 text-[11px] font-semibold text-gray-300 hover:text-white border border-[#383838] transition-all cursor-pointer"
-              title="Shuffle avatar parameters"
+              title="Shuffle avatar parameters & background color"
             >
               <RefreshCw className="w-3 h-3 text-red-400" />
-              <span>Randomize Seed</span>
+              <span>Randomize Color & Seed</span>
             </button>
           </div>
 
           {/* User Details Form */}
-          <div className="w-full space-y-3.5 min-w-0">
+          <div className="w-full space-y-3 min-w-0">
             <div>
               <label className="block text-xs font-semibold text-gray-300 mb-1">
                 Display Name
@@ -196,7 +241,7 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Gojo Satoru"
-                className="w-full px-3.5 py-2.5 text-xs bg-[#222222] text-white placeholder-gray-500 rounded-xl border border-[#383838] focus:outline-none focus:border-red-500 transition-colors"
+                className="w-full px-3.5 py-2 text-xs bg-[#222222] text-white placeholder-gray-500 rounded-xl border border-[#383838] focus:outline-none focus:border-red-500 transition-colors"
               />
             </div>
 
@@ -213,18 +258,49 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
                   placeholder="e.g. otaku_master"
-                  className="w-full pl-8 pr-3.5 py-2.5 text-xs bg-[#222222] text-white placeholder-gray-500 rounded-xl border border-[#383838] focus:outline-none focus:border-red-500 transition-colors"
+                  className="w-full pl-8 pr-3.5 py-2 text-xs bg-[#222222] text-white placeholder-gray-500 rounded-xl border border-[#383838] focus:outline-none focus:border-red-500 transition-colors"
                 />
               </div>
-              <p className="text-[10px] text-gray-500 mt-1">
-                Changing your username instantly requests & updates all avatar styles below.
-              </p>
+            </div>
+
+            {/* Background Color Swatches */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="flex items-center gap-1 text-[11px] font-semibold text-gray-300">
+                  <Palette className="w-3 h-3 text-amber-400" />
+                  <span>Avatar Background Color</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const randomColor = AVATAR_BG_COLORS[Math.floor(Math.random() * AVATAR_BG_COLORS.length)];
+                    setBgColor(randomColor);
+                  }}
+                  className="text-[10px] text-red-400 hover:text-red-300 font-bold hover:underline cursor-pointer"
+                >
+                  Randomize
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                {AVATAR_BG_COLORS.slice(0, 14).map((colorHex) => (
+                  <button
+                    key={colorHex}
+                    type="button"
+                    onClick={() => setBgColor(colorHex)}
+                    style={{ backgroundColor: `#${colorHex}` }}
+                    className={`w-6 h-6 rounded-full shrink-0 border transition-transform cursor-pointer ${
+                      bgColor === colorHex ? 'scale-125 border-white ring-2 ring-red-500 shadow-md' : 'border-black/30 hover:scale-110'
+                    }`}
+                    title={`#${colorHex}`}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Avatar Style Picker Grid */}
-        <div className="space-y-4 max-h-[260px] sm:max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+        <div className="space-y-4 max-h-[220px] sm:max-h-[260px] overflow-y-auto pr-1 custom-scrollbar">
           {categories.map((category) => {
             const stylesInCat = AVATAR_STYLES.filter((s) => s.category === category);
             return (
@@ -238,21 +314,29 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   {stylesInCat.map((style) => {
-                    const styleUrl = getAvatarUrl(style.id, activeSeed);
+                    const styleUrl = getAvatarUrl(style.id, activeSeed, bgColor);
                     const isSelected = selectedStyle === style.id;
 
                     return (
                       <button
                         key={style.id}
                         type="button"
-                        onClick={() => setSelectedStyle(style.id)}
+                        onClick={() => {
+                          setSelectedStyle(style.id);
+                          // Optionally shift to a new color when picking a style
+                          const randomColor = AVATAR_BG_COLORS[Math.floor(Math.random() * AVATAR_BG_COLORS.length)];
+                          setBgColor(randomColor);
+                        }}
                         className={`group relative flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-red-950/30 border-red-500 ring-2 ring-red-500/40 shadow-lg'
                             : 'bg-[#1a1a1a] border-[#292929] hover:bg-[#222222] hover:border-[#3d3d3d]'
                         }`}
                       >
-                        <div className="relative w-12 h-12 rounded-lg bg-[#252525] p-1 shrink-0 overflow-hidden border border-[#333]">
+                        <div 
+                          className="relative w-12 h-12 rounded-lg p-1 shrink-0 overflow-hidden border border-[#333] transition-colors"
+                          style={{ backgroundColor: `#${bgColor}` }}
+                        >
                           <img
                             src={styleUrl}
                             alt={style.name}
@@ -317,3 +401,4 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
     </div>
   );
 };
+

@@ -42,7 +42,12 @@ export default function App() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
   const [customVideos, setCustomVideos] = useState<Video[]>([]);
 
@@ -87,15 +92,7 @@ export default function App() {
   useEffect(() => {
     setWatchLaterItems(getWatchLaterList());
     setLikedItems(getLikedEpisodesList());
-
-    let currentHistory = getWatchHistoryList();
-    if (currentHistory.length === 0) {
-      // Seed initial 5 anime into watch history if empty
-      const initialSeed = MOCK_VIDEOS.slice(0, 5);
-      initialSeed.forEach((v) => addToWatchHistory(v));
-      currentHistory = getWatchHistoryList();
-    }
-    setWatchHistoryItems(currentHistory);
+    setWatchHistoryItems(getWatchHistoryList());
 
     const handleStorageUpdate = () => {
       setWatchLaterItems(getWatchLaterList());
@@ -431,6 +428,7 @@ export default function App() {
             onSearchChange={setSearchQuery}
             onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
             onHomeClick={handleHomeClick}
+            onLogoClick={() => setShowLanding(true)}
             userProfile={userProfile}
             onOpenAvatarModal={() => setIsAvatarModalOpen(true)}
           />
@@ -806,23 +804,9 @@ export default function App() {
                   />
                 )}
 
-                {/* Top Reel (Reel #0 from current sequence, e.g. Popular or randomized) */}
-                {!searchQuery && selectedCategory === 'All' && orderedReels.length > 0 && (
-                  <AnimeHorizontalSlider
-                    key={orderedReels[0].id}
-                    title={orderedReels[0].title}
-                    subtitle={orderedReels[0].subtitle}
-                    icon={orderedReels[0].icon}
-                    videos={orderedReels[0].videos}
-                    onSelectVideo={handleSelectVideo}
-                    onViewAll={() => setActiveView(orderedReels[0].view)}
-                    isLoading={isCategoriesLoading}
-                  />
-                )}
-
-                {/* Main Video Grid Feed Header */}
+                {/* Main Video Grid Feed Header: Recent Anime Catalogue & Updates FIRST */}
                 {!searchQuery && selectedCategory === 'All' && (
-                  <div className="pt-6 border-t border-[#222222]">
+                  <div className="pt-2">
                     <div className="flex items-center justify-between gap-4 mb-4">
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-white" />
@@ -878,13 +862,13 @@ export default function App() {
                         ))}
                       </div>
                     ) : (
-                      /* Home Feed: Interleave Category Reels between page batches as pages load */
+                      /* Home Feed: Recent Catalogue Batch 0 FIRST, followed by Reels interleaved */
                       <div className="space-y-8">
                         {videoBatches.map((batch, batchIdx) => {
-                          const nextReel = orderedReels[batchIdx + 1];
+                          const currentReel = orderedReels[batchIdx];
                           return (
                             <Fragment key={`feed-batch-${batchIdx}`}>
-                              {/* Grid of Anime Cards for this Page Batch */}
+                              {/* Grid of Anime Cards for this Recent Catalogue Batch */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
                                 {batch.map((video) => (
                                   <VideoCard
@@ -895,17 +879,17 @@ export default function App() {
                                 ))}
                               </div>
 
-                              {/* Category Reel appearing dynamically after this page batch (e.g. Ongoing on Page 2, Upcoming on Page 3, Completed on Page 4) */}
-                              {nextReel && (
+                              {/* Category Reel appearing directly AFTER this Recent Catalogue Batch */}
+                              {currentReel && (
                                 <div className="pt-2">
                                   <AnimeHorizontalSlider
-                                    key={nextReel.id}
-                                    title={nextReel.title}
-                                    subtitle={nextReel.subtitle}
-                                    icon={nextReel.icon}
-                                    videos={nextReel.videos}
+                                    key={currentReel.id}
+                                    title={currentReel.title}
+                                    subtitle={currentReel.subtitle}
+                                    icon={currentReel.icon}
+                                    videos={currentReel.videos}
                                     onSelectVideo={handleSelectVideo}
-                                    onViewAll={() => setActiveView(nextReel.view)}
+                                    onViewAll={() => setActiveView(currentReel.view)}
                                     isLoading={isCategoriesLoading}
                                   />
                                 </div>

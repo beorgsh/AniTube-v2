@@ -243,6 +243,7 @@ export interface UserProfile {
   username: string;
   avatarUrl: string;
   avatarStyle: string;
+  avatarBgColor?: string;
 }
 
 const USER_PROFILE_KEY = 'anitube_user_profile_data';
@@ -260,8 +261,9 @@ export function getUserProfile(): UserProfile {
   return {
     name: 'Otaku Explorer',
     username: 'otaku_master',
-    avatarUrl: 'https://api.dicebear.com/9.x/adventurer/png?seed=otaku_master',
+    avatarUrl: 'https://api.dicebear.com/9.x/adventurer/png?seed=otaku_master&backgroundColor=b6e3f4',
     avatarStyle: 'adventurer',
+    avatarBgColor: 'b6e3f4',
   };
 }
 

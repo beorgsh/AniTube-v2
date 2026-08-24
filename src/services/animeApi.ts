@@ -333,14 +333,15 @@ export async function fetchRecentAnime(page: number = 1, perPage: number = 10): 
     total_pages: number;
   };
 }> {
-  const directUrl = `https://anikotoapi.site/recent-anime?page=${page}&per_page=${perPage}`;
   const proxyUrl = `/api/recent-anime?page=${page}&per_page=${perPage}`;
+  const directUrl = `https://anikotoapi.site/recent-anime?page=${page}&per_page=${perPage}`;
 
   let responseData: AnikotoResponse | null = null;
   let lastError: Error | null = null;
 
+  // 1. Try local proxy first
   try {
-    const res = await fetch(directUrl, {
+    const res = await fetch(proxyUrl, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -353,9 +354,10 @@ export async function fetchRecentAnime(page: number = 1, perPage: number = 10): 
     lastError = err as Error;
   }
 
+  // 2. Try direct URL fallback
   if (!responseData || !responseData.ok) {
     try {
-      const res = await fetch(proxyUrl, {
+      const res = await fetch(directUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -369,23 +371,46 @@ export async function fetchRecentAnime(page: number = 1, perPage: number = 10): 
     }
   }
 
-  if (!responseData || !responseData.ok || !Array.isArray(responseData.data)) {
-    throw new Error(lastError?.message || 'Failed to fetch anime data from anikotoapi.site');
+  if (responseData && responseData.ok && Array.isArray(responseData.data)) {
+    const videos = responseData.data.map((item, idx) =>
+      transformAnimeToVideo(item, (page - 1) * perPage + idx)
+    );
+
+    return {
+      videos,
+      pagination: responseData.pagination || {
+        page,
+        per_page: perPage,
+        total: videos.length,
+        total_pages: 1,
+      },
+    };
   }
 
-  const videos = responseData.data.map((item, idx) =>
-    transformAnimeToVideo(item, (page - 1) * perPage + idx)
-  );
+  // 3. Robust client-side fallback to latest-episodes category
+  try {
+    const categoryItems = await fetchAnikotoCategory('latest-episodes');
+    if (categoryItems.length > 0) {
+      const categoryVideos = categoryItems.map((item) => transformAnikotoCategoryItemToVideo(item, 'Recent Updates'));
+      const startIndex = (page - 1) * perPage;
+      const paginated = categoryVideos.slice(startIndex, startIndex + perPage);
+      const activeList = paginated.length > 0 ? paginated : categoryVideos.slice(0, perPage);
 
-  return {
-    videos,
-    pagination: responseData.pagination || {
-      page,
-      per_page: perPage,
-      total: videos.length,
-      total_pages: 1,
-    },
-  };
+      return {
+        videos: activeList,
+        pagination: {
+          page,
+          per_page: perPage,
+          total: categoryVideos.length,
+          total_pages: Math.ceil(categoryVideos.length / perPage) || 1,
+        },
+      };
+    }
+  } catch (catErr) {
+    console.warn('Category fallback in fetchRecentAnime failed:', catErr);
+  }
+
+  throw new Error(lastError?.message || 'Failed to fetch recent anime catalogue');
 }
 
 /**

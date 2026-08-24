@@ -732,7 +732,7 @@ export const WatchView = ({
               </div>
 
               {franchiseSeasons.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                <div className="flex sm:grid overflow-x-auto sm:overflow-visible no-scrollbar sm:grid-cols-3 md:grid-cols-4 gap-3 pb-2 sm:pb-0">
                   {franchiseSeasons.map((season) => (
                     <div
                       key={season.id}
@@ -749,7 +749,7 @@ export const WatchView = ({
                           });
                         }
                       }}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-2 cursor-pointer transition-all hover:bg-[#252525] group ${
+                      className={`shrink-0 w-36 sm:w-auto p-2.5 rounded-xl border flex flex-col items-center gap-2 cursor-pointer transition-all hover:bg-[#252525] group ${
                         season.isActive
                           ? 'bg-[#272727] border-white text-white shadow-lg'
                           : 'bg-[#1a1a1a] border-[#2c2c2c] text-gray-200 hover:border-[#444]'
@@ -1030,7 +1030,7 @@ export const WatchView = ({
                 <span className="text-[10px] text-[#aaaaaa]">Franchise</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-0.5 scrollbar-thin scrollbar-thumb-[#333]">
+              <div className="flex sm:grid overflow-x-auto sm:overflow-y-auto no-scrollbar sm:grid-cols-2 gap-2 max-h-64 pr-0.5 scrollbar-thin scrollbar-thumb-[#333] pb-1 sm:pb-0">
                 {animeInfo.seasons.map((season) => (
                   <div
                     key={season.id}
@@ -1045,7 +1045,7 @@ export const WatchView = ({
                         });
                       }
                     }}
-                    className={`p-1.5 rounded-lg border flex flex-col gap-1.5 cursor-pointer transition-all hover:bg-[#252525] ${
+                    className={`shrink-0 w-32 sm:w-auto p-1.5 rounded-lg border flex flex-col gap-1.5 cursor-pointer transition-all hover:bg-[#252525] ${
                       season.isActive
                         ? 'bg-[#272727] border-white text-white'
                         : 'bg-[#1e1e1e] border-[#2c2c2c] text-gray-200'
