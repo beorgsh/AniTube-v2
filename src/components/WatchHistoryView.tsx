@@ -285,7 +285,7 @@ export const WatchHistoryView: React.FC<WatchHistoryViewProps> = ({
 
                     {/* RED YOUTUBE PROGRESS BAR AT BOTTOM OF POSTER OVERLAY */}
                     {typeof video.progressPercent === 'number' && video.progressPercent > 0 && (
-                      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60 overflow-hidden z-20">
+                      <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-black/60 overflow-hidden z-20">
                         <div
                           className="h-full bg-red-600 transition-all duration-300 shadow-sm"
                           style={{ width: `${Math.min(100, Math.max(3, video.progressPercent))}%` }}

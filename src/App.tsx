@@ -406,6 +406,7 @@ export default function App() {
   const handleSelectVideo = (video: Video) => {
     setSelectedVideo(video);
     setActiveView('watch');
+    setIsSidebarOpen(false);
     addToWatchHistory(video);
     setWatchHistoryItems(getWatchHistoryList());
     window.scrollTo({ top: 0, behavior: 'smooth' });

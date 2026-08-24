@@ -38,7 +38,9 @@ import {
   isEpisodeLiked, 
   toggleLikedEpisode,
   addToWatchHistory,
-  updateWatchProgress
+  updateWatchProgress,
+  getEpisodeProgress,
+  getEpisodeTime
 } from '../services/sessionStorage';
 
 interface WatchViewProps {
@@ -97,6 +99,7 @@ export const WatchView = ({
   const toastTimeoutRef = useRef<any>(null);
   const currentPlayerTime = useRef<number>(0);
   const [serverSwitchTime, setServerSwitchTime] = useState<number>(0);
+  const [episodeProgressMap, setEpisodeProgressMap] = useState<{ [epNum: number]: number }>({});
 
   const showToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -195,10 +198,34 @@ export const WatchView = ({
     setIsLiked(isEpisodeLiked(targetKey, currentEpisode));
   }, [video.id, video.slug, activeSlug, currentEpisode]);
 
+  // Reset/sync anime-specific state when selecting a new video
+  useEffect(() => {
+    setCurrentEpisode(video.episodeNumber || 1);
+    setActiveSlug(video.slug);
+    setSourceType(video.slug ? 'slug' : 'mal');
+    setAnimeInfo(null);
+    setEpisodesMetadata([]);
+    setMetadataImages([]);
+    setIsLoadingInfo(true);
+    setServers(video.availableServers || []);
+    setActiveServerIndex(0);
+    setCurrentIntro(video.intro);
+    setCurrentOutro(video.outro);
+    setStreamError(null);
+  }, [video.id]);
+
+  // Sync currentEpisode with video.episodeNumber if it changes externally (e.g. from history click)
+  useEffect(() => {
+    if (video.episodeNumber) {
+      setCurrentEpisode(video.episodeNumber);
+    }
+  }, [video.episodeNumber]);
+
   // Fetch Stream ONLY on video or episode change
   useEffect(() => {
-    setServerSwitchTime(0);
     const targetKey = activeSlug || video.slug || video.id;
+    const savedTime = getEpisodeTime(targetKey, currentEpisode);
+    setServerSwitchTime(savedTime);
     setIsLiked(isEpisodeLiked(targetKey, currentEpisode));
     setIsDisliked(video.isDisliked || false);
     setLikesCount(video.likesCount || 240000);
@@ -434,6 +461,19 @@ export const WatchView = ({
     }
   }, [animeInfo, currentEpisode, allVideos, video.id, onSelectVideo]);
 
+  const handleNextEpisode = useCallback(() => {
+    const totalEp = animeInfo?.episodes?.length || (typeof animeInfo?.totalSub === 'number' ? animeInfo.totalSub : 12);
+    if (currentEpisode + 1 <= totalEp) {
+      setCurrentEpisode(currentEpisode + 1);
+    }
+  }, [animeInfo, currentEpisode]);
+
+  const handlePrevEpisode = useCallback(() => {
+    if (currentEpisode - 1 > 0) {
+      setCurrentEpisode(currentEpisode - 1);
+    }
+  }, [currentEpisode]);
+
   // Anime Detail Banner or Fanart Fallback Resolution
   const animeBannerOrFanart = useMemo(() => {
     // 1. Search metadata images for fanart, banner, backdrop
@@ -609,10 +649,21 @@ export const WatchView = ({
               sourceType={sourceType}
               initialTime={serverSwitchTime}
               onEnded={handleVideoEnded}
+              onNext={handleNextEpisode}
+              onPrev={handlePrevEpisode}
               onTimeUpdate={(time, dur) => {
                 currentPlayerTime.current = time;
                 const targetKey = activeSlug || video.slug || video.id;
                 updateWatchProgress(targetKey, time, dur, currentEpisode);
+                
+                // Keep the UI synced with episode progress in real-time
+                const progressPercent = Math.min(100, Math.max(0, Math.round((time / dur) * 100)));
+                if (episodeProgressMap[currentEpisode] !== progressPercent) {
+                  setEpisodeProgressMap(prev => ({
+                    ...prev,
+                    [currentEpisode]: progressPercent
+                  }));
+                }
               }}
             />
           </div>
@@ -796,31 +847,25 @@ export const WatchView = ({
 
                     {/* Engine Mode Selection */}
                     <div className="space-y-1">
-                      <label className="text-[11px] text-gray-400 font-medium">Stream Priority Mode:</label>
-                      <div className="grid grid-cols-3 gap-1 bg-[#181818] p-1 rounded-lg">
-                        <button
-                          onClick={() => setStreamMode('auto')}
-                          className={`py-1.5 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                            streamMode === 'auto' ? 'bg-white text-black font-bold' : 'text-gray-300 hover:text-white'
-                          }`}
-                        >
-                          Auto
-                        </button>
+                      <label className="text-[11px] text-gray-400 font-medium">Select Stream Provider:</label>
+                      <div className="grid grid-cols-2 gap-1 bg-[#181818] p-1 rounded-lg">
                         <button
                           onClick={() => setStreamMode('mal')}
-                          className={`py-1.5 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                            streamMode === 'mal' ? 'bg-white text-black font-bold' : 'text-gray-300 hover:text-white'
+                          className={`py-1.5 px-1 rounded text-[11px] font-bold transition-all cursor-pointer text-center truncate ${
+                            streamMode !== 'slug' ? 'bg-white text-black' : 'text-gray-300 hover:text-white'
                           }`}
+                          title="Provider 1 Anikototo (MAL)"
                         >
-                          MAL ID
+                          1 Anikototo(MAL)
                         </button>
                         <button
                           onClick={() => setStreamMode('slug')}
-                          className={`py-1.5 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                            streamMode === 'slug' ? 'bg-white text-black font-bold' : 'text-gray-300 hover:text-white'
+                          className={`py-1.5 px-1 rounded text-[11px] font-bold transition-all cursor-pointer text-center truncate ${
+                            streamMode === 'slug' ? 'bg-white text-black' : 'text-gray-300 hover:text-white'
                           }`}
+                          title="Provider 2 with Slug"
                         >
-                          Slug
+                          2 with Slug
                         </button>
                       </div>
                     </div>
@@ -869,21 +914,6 @@ export const WatchView = ({
                         <RefreshCw className="w-3.5 h-3.5" />
                         Apply & Reload Stream
                       </button>
-
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          onClick={() => handleReloadStream('mal', customMalId, customSlug)}
-                          className="py-1.5 px-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white rounded text-[11px] font-medium transition-colors cursor-pointer text-center"
-                        >
-                          Try MAL ID
-                        </button>
-                        <button
-                          onClick={() => handleReloadStream('slug', customMalId, customSlug)}
-                          className="py-1.5 px-2 bg-[#2d2d2d] hover:bg-[#3d3d3d] text-white rounded text-[11px] font-medium transition-colors cursor-pointer text-center"
-                        >
-                          Try Slug
-                        </button>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -1185,6 +1215,9 @@ export const WatchView = ({
                     resolvedEpisodes.map((ep) => {
                       const isSelected = currentEpisode === ep.number;
                       const isAvailable = ep.isAvailable;
+                      const progress = episodeProgressMap[ep.number] !== undefined
+                        ? episodeProgressMap[ep.number]
+                        : getEpisodeProgress(activeSlug || video.slug || video.id, ep.number);
                       return (
                         <div
                           key={ep.id || `ep-${ep.number}`}
@@ -1234,14 +1267,26 @@ export const WatchView = ({
                                 </div>
                               </div>
                             )}
+
+                            {/* Thin progress line overlay */}
+                            {progress > 0 && (
+                              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-black/60 overflow-hidden z-20">
+                                <div
+                                  className="h-full bg-red-600 transition-all duration-300"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
 
                           {/* Text Metadata */}
                           <div className="flex flex-col justify-between flex-1 min-w-0 py-0.5">
                             <div>
-                              <div className="text-xs font-bold truncate text-white">
-                                EP {ep.number}: {ep.title || `Episode ${ep.number}`}
-                              </div>
+                              {ep.title && !ep.title.toLowerCase().includes(`episode`) && (
+                                <div className="text-xs font-bold truncate text-white mb-1">
+                                  {ep.title}
+                                </div>
+                              )}
                               {ep.description && (
                                 <p className="text-[11px] text-[#aaaaaa] line-clamp-2 leading-tight pt-0.5">
                                   {ep.description}

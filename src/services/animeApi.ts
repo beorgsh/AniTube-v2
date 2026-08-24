@@ -534,17 +534,36 @@ export async function fetchAnimeStreamBySlug(
     parsedSubs.find((s) => s.label?.toLowerCase().includes('eng')) ||
     parsedSubs[0];
 
+  const simplifiedServers = renameServersSimplified(servers);
+
   return {
     streamUrl: proxiedM3u8,
     rawM3u8Url: data.m3u8,
     subtitles: parsedSubs,
-    servers,
+    servers: simplifiedServers,
     defaultEnglishVtt,
     intro,
     outro,
     slug: cleanSlug,
     sourceType: 'slug',
   };
+}
+
+export function renameServersSimplified(servers: StreamSource[]): StreamSource[] {
+  let subCount = 1;
+  let dubCount = 1;
+  return servers.map((srv) => {
+    const isDub = srv.category === 'dub' || srv.serverName?.toLowerCase().includes('dub');
+    if (isDub) {
+      const name = `Server ${dubCount} Dub`;
+      dubCount++;
+      return { ...srv, serverName: name };
+    } else {
+      const name = `Server ${subCount} Sub`;
+      subCount++;
+      return { ...srv, serverName: name };
+    }
+  });
 }
 
 /**
@@ -699,11 +718,13 @@ export async function fetchAnimeStreamByMalId(
     primaryServer.subtitles.find((s) => s.isDefault) ||
     allSubtitles[0];
 
+  const simplifiedServers = renameServersSimplified(servers);
+
   return {
     streamUrl: proxiedM3u8,
     rawM3u8Url: primaryServer.m3u8,
     subtitles: allSubtitles.length > 0 ? allSubtitles : primaryServer.subtitles,
-    servers,
+    servers: simplifiedServers,
     defaultEnglishVtt,
     slug: discoveredSlug,
     sourceType: 'mal',

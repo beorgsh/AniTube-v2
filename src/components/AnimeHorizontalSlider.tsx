@@ -229,7 +229,7 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
                       </div>
 
                       {/* Bottom Progress Bar */}
-                      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/80 z-20 overflow-hidden">
+                      <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-black/80 z-20 overflow-hidden">
                         <div
                           className="h-full bg-red-600 rounded-r-full transition-all duration-300"
                           style={{ width: `${progress}%` }}

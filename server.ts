@@ -654,6 +654,116 @@ app.use(express.json());
       return res.status(400).send('Subtitle URL required');
     }
 
+    // Helper functions for parsing and standardizing timestamps
+    function normalizeTimestamp(ts: string): string | null {
+      ts = ts.trim();
+      // Strip any trailing formatting or placement metadata (like line:0% position:50%)
+      const mainTime = ts.split(/\s+/)[0];
+      const cleanTime = mainTime.replace(',', '.');
+
+      // Match hours:minutes:seconds.milliseconds or minutes:seconds.milliseconds
+      const regex = /^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\.(\d{1,3}))?$/;
+      const match = cleanTime.match(regex);
+
+      const formatParts = (p1: string, p2: string, p3: string | undefined, p4: string | undefined): string => {
+        let hh = '00';
+        let mm = '00';
+        let ss = '00';
+        let mmm = '000';
+
+        if (p3 !== undefined) {
+          hh = p1.padStart(2, '0');
+          mm = p2.padStart(2, '0');
+          ss = p3.padStart(2, '0');
+        } else {
+          mm = p1.padStart(2, '0');
+          ss = p2.padStart(2, '0');
+        }
+
+        if (p4 !== undefined) {
+          mmm = p4.padEnd(3, '0').slice(0, 3);
+        }
+
+        return `${hh}:${mm}:${ss}.${mmm}`;
+      };
+
+      if (!match) {
+        // Fallback loose digits and colon/dot extractor
+        const digitsOnly = cleanTime.replace(/[^\d:.]/g, '');
+        const looseMatch = digitsOnly.match(/^(\d+):(\d+)(?::(\d+))?(?:\.(\d+))?$/);
+        if (!looseMatch) return null;
+        return formatParts(looseMatch[1], looseMatch[2], looseMatch[3], looseMatch[4]);
+      }
+
+      return formatParts(match[1], match[2], match[3], match[4]);
+    }
+
+    function sanitizeSubtitleToVtt(rawText: string): string {
+      if (!rawText) return 'WEBVTT\n\n';
+
+      const lines = rawText
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n');
+
+      const cues: Array<{ start: string; end: string; textLines: string[] }> = [];
+
+      let currentStart: string | null = null;
+      let currentEnd: string | null = null;
+      let currentTextLines: string[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.includes('-->')) {
+          // Save active cue before starting new one
+          if (currentStart && currentEnd && currentTextLines.length > 0) {
+            cues.push({ start: currentStart, end: currentEnd, textLines: currentTextLines });
+          }
+
+          const parts = line.split('-->');
+          if (parts.length === 2) {
+            const startNorm = normalizeTimestamp(parts[0]);
+            const endNorm = normalizeTimestamp(parts[1]);
+
+            if (startNorm && endNorm) {
+              currentStart = startNorm;
+              currentEnd = endNorm;
+              currentTextLines = [];
+              continue;
+            }
+          }
+          currentStart = null;
+          currentEnd = null;
+          currentTextLines = [];
+        } else if (currentStart && currentEnd) {
+          if (line === '') {
+            if (currentTextLines.length > 0) {
+              cues.push({ start: currentStart, end: currentEnd, textLines: currentTextLines });
+            }
+            currentStart = null;
+            currentEnd = null;
+            currentTextLines = [];
+          } else {
+            currentTextLines.push(line);
+          }
+        }
+      }
+
+      // Add trailing cue
+      if (currentStart && currentEnd && currentTextLines.length > 0) {
+        cues.push({ start: currentStart, end: currentEnd, textLines: currentTextLines });
+      }
+
+      let vtt = 'WEBVTT\n\n';
+      cues.forEach((cue) => {
+        vtt += `${cue.start} --> ${cue.end}\n`;
+        vtt += `${cue.textLines.join('\n')}\n\n`;
+      });
+
+      return vtt.trim() + '\n';
+    }
+
     try {
       const response = await fetch(targetUrl, {
         headers: {
@@ -684,17 +794,13 @@ Subtitle track synchronized with live HLS playback
         return res.send(fallbackVtt);
       }
 
-      let vttText = await response.text();
-
-      // Ensure proper WEBVTT header if missing
-      if (!vttText.trim().startsWith('WEBVTT')) {
-        vttText = `WEBVTT\n\n${vttText}`;
-      }
+      const rawText = await response.text();
+      const sanitizedVtt = sanitizeSubtitleToVtt(rawText);
 
       res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'public, max-age=7200');
-      res.send(vttText);
+      res.send(sanitizedVtt);
     } catch (error) {
       console.error('Error proxying vtt subtitle:', error);
       res.status(500).send('Error proxying subtitle');

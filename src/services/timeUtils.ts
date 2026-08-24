@@ -13,8 +13,10 @@ export function formatRelativeTime(dateInput?: string | number | Date | null): s
   if (typeof dateInput === 'string' && /(ago|just now|yesterday)/i.test(dateInput)) {
     let cleaned = dateInput.trim();
     // Normalize YouTube abbreviations and singular/plural:
-    cleaned = cleaned.replace(/\b1\s+hours?\s+ago\b/i, '1 hr ago');
-    cleaned = cleaned.replace(/\b(\d+)\s+hours?\s+ago\b/i, '$1 hrs ago');
+    cleaned = cleaned.replace(/\b1\s+hr\s+ago\b/i, '1 hour ago');
+    cleaned = cleaned.replace(/\b(\d+)\s+hrs\s+ago\b/i, '$1 hours ago');
+    cleaned = cleaned.replace(/\b1\s+hours?\s+ago\b/i, '1 hour ago');
+    cleaned = cleaned.replace(/\b(\d+)\s+hours?\s+ago\b/i, '$1 hours ago');
     cleaned = cleaned.replace(/\b1\s+days?\s+ago\b/i, '1 day ago');
     cleaned = cleaned.replace(/\b(\d+)\s+days?\s+ago\b/i, '$1 days ago');
     cleaned = cleaned.replace(/\b1\s+weeks?\s+ago\b/i, '1 week ago');
@@ -64,7 +66,7 @@ export function formatRelativeTime(dateInput?: string | number | Date | null): s
     return minutes === 1 ? '1 min ago' : `${minutes} mins ago`;
   }
   if (hours < 24) {
-    return hours === 1 ? '1 hr ago' : `${hours} hrs ago`;
+    return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
   }
   if (days < 7) {
     return days === 1 ? '1 day ago' : `${days} days ago`;

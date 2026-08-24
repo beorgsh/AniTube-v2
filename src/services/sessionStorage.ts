@@ -253,6 +253,41 @@ export function updateWatchProgress(
     };
     saveWatchHistoryList(list);
   }
+
+  // Save episode-specific progress to render on thumbnails in the episode list
+  if (episodeNumber) {
+    try {
+      const epKey = `ep_progress:${videoIdOrSlug}:ep:${episodeNumber}`;
+      localStorage.setItem(epKey, String(progressPercent));
+      
+      const epTimeKey = `ep_time:${videoIdOrSlug}:ep:${episodeNumber}`;
+      localStorage.setItem(epTimeKey, String(currentTime));
+    } catch (e) {
+      console.warn('Error saving episode progress:', e);
+    }
+  }
+}
+
+export function getEpisodeProgress(videoIdOrSlug: string, episodeNumber: number): number {
+  if (!videoIdOrSlug || !episodeNumber) return 0;
+  try {
+    const epKey = `ep_progress:${videoIdOrSlug}:ep:${episodeNumber}`;
+    const val = localStorage.getItem(epKey);
+    return val ? parseInt(val, 10) || 0 : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+export function getEpisodeTime(videoIdOrSlug: string, episodeNumber: number): number {
+  if (!videoIdOrSlug || !episodeNumber) return 0;
+  try {
+    const epTimeKey = `ep_time:${videoIdOrSlug}:ep:${episodeNumber}`;
+    const val = localStorage.getItem(epTimeKey);
+    return val ? parseFloat(val) || 0 : 0;
+  } catch (e) {
+    return 0;
+  }
 }
 
 export function removeFromWatchHistory(videoId: string): void {
