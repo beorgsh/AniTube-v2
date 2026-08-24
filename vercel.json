@@ -2,36 +2,8 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/anime/stream/:malId/:ep",
-      "destination": "https://aniapikoto.vercel.app/api/anikoto/mal/:malId/:ep"
-    },
-    {
-      "source": "/api/anime/slug-stream",
-      "destination": "https://anikoto-api.vercel.app/api/stream"
-    },
-    {
-      "source": "/api/recent-anime",
-      "destination": "https://anikotoapi.site/recent-anime"
-    },
-    {
-      "source": "/api/anime/category/:cat",
-      "destination": "https://anikoto-api.vercel.app/api/:cat"
-    },
-    {
-      "source": "/api/anime/info",
-      "destination": "https://anikoto-api.vercel.app/api/info"
-    },
-    {
-      "source": "/api/anime/search",
-      "destination": "https://anikoto-api.vercel.app/api/search"
-    },
-    {
-      "source": "/api/anime/genre/:genre",
-      "destination": "https://anikototvapi.vercel.app/api/genre/:genre"
-    },
-    {
-      "source": "/api/anime/metadata/:id",
-      "destination": "https://anime-metadata-api.vercel.app/api/episodes/:id"
+      "source": "/api/(.*)",
+      "destination": "/api/index"
     },
     {
       "source": "/(.*)",

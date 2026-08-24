@@ -974,7 +974,7 @@ export const WatchView = ({
                 <div>
                   <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                     <Film className="w-4 h-4 text-white" />
-                    <span>Seasons</span>
+                    <span>Franchise & Seasons</span>
                     {franchiseSeasons.length > 0 && (
                       <span className="px-2 py-0.5 rounded-full bg-[#272727] text-gray-300 text-xs font-normal">
                         {franchiseSeasons.length}
@@ -1275,9 +1275,9 @@ export const WatchView = ({
             </div>
           </div>
 
-          {/* Franchise & Seasons in Sidebar */}
+          {/* Franchise & Seasons in Sidebar (Hidden on mobile to avoid duplicate containers) */}
           {animeInfo?.seasons && animeInfo.seasons.length > 0 && (
-            <div className="bg-[#181818] border border-[#272727] rounded-xl p-3.5 space-y-2.5 shadow-lg">
+            <div className="hidden lg:block bg-[#181818] border border-[#272727] rounded-xl p-3.5 space-y-2.5 shadow-lg">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                   <Film className="w-3.5 h-3.5 text-white" />

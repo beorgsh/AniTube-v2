@@ -4,6 +4,13 @@ import { Video } from '../types';
 import { FadeImage } from './FadeImage';
 
 
+function formatWatchTime(seconds?: number): string {
+  if (!seconds || isNaN(seconds) || seconds <= 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 interface AnimeHorizontalSliderProps {
   title: string;
   subtitle?: string;
@@ -12,6 +19,7 @@ interface AnimeHorizontalSliderProps {
   onSelectVideo: (video: Video) => void;
   onViewAll?: () => void;
   isLoading?: boolean;
+  isLandscape?: boolean;
 }
 
 export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
@@ -22,10 +30,13 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
   onSelectVideo,
   onViewAll,
   isLoading = false,
+  isLandscape = false,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [shuffledVideos, setShuffledVideos] = useState<Video[]>([]);
   const [isShuffled, setIsShuffled] = useState(false);
+
+  const isLandscapeMode = isLandscape || icon === 'history' || title === 'Watch History';
 
   // Active display list
   const displayVideos = isShuffled && shuffledVideos.length > 0 ? shuffledVideos : videos;
@@ -177,6 +188,82 @@ export const AnimeHorizontalSlider: React.FC<AnimeHorizontalSliderProps> = ({
               const subCount = video.tags?.find((t) => t.startsWith('Sub:'))?.replace('Sub: ', '');
               const dubCount = video.tags?.find((t) => t.startsWith('Dub:'))?.replace('Dub: ', '');
               const animeType = video.tags?.[1] || video.category || 'TV';
+
+              if (isLandscapeMode) {
+                const progress = video.progressPercent !== undefined && !isNaN(video.progressPercent) 
+                  ? Math.min(100, Math.max(0, video.progressPercent)) 
+                  : 0;
+
+                return (
+                  <div
+                    key={video.id}
+                    onClick={() => onSelectVideo(video)}
+                    className="shrink-0 w-60 sm:w-72 flex flex-col gap-2 group/card cursor-pointer"
+                    style={{ scrollSnapAlign: 'start' }}
+                  >
+                    {/* Landscape 16:9 Thumbnail Container */}
+                    <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-[#161616] border border-[#272727] hover:border-white/40 shadow-lg group-hover/card:shadow-2xl transition-all duration-300 group-hover/card:-translate-y-1">
+                      {/* Image */}
+                      <FadeImage
+                        src={video.thumbnail || video.poster}
+                        alt={video.title}
+                        className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500"
+                        containerClassName="w-full h-full"
+                      />
+
+                      {/* Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+
+                      {/* Top Badges */}
+                      <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 pointer-events-none">
+                        {video.episodeNumber ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-red-600 backdrop-blur-md text-white border border-red-500/50 shadow-sm">
+                            EP {video.episodeNumber}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {/* Watch Duration / Timestamp Badge */}
+                      {(video.currentTime || video.durationSeconds) && (
+                        <div className="absolute bottom-2 right-2 z-10 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-mono text-white pointer-events-none backdrop-blur-xs">
+                          {formatWatchTime(video.currentTime)} / {formatWatchTime(video.durationSeconds || 1440)}
+                        </div>
+                      )}
+
+                      {/* Center Hover Play Icon */}
+                      <div className="absolute inset-0 z-20 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity bg-black/30 pointer-events-none">
+                        <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-2xl transform scale-75 group-hover/card:scale-100 transition-transform duration-200">
+                          <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+                        </div>
+                      </div>
+
+                      {/* Bottom Progress Bar */}
+                      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/80 z-20 overflow-hidden">
+                        <div
+                          className="h-full bg-red-600 rounded-r-full transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Text Metadata Below Thumbnail */}
+                    <div className="px-0.5 space-y-0.5">
+                      <h3
+                        className="text-xs sm:text-sm font-bold text-white line-clamp-1 leading-snug group-hover/card:text-red-400 transition-colors"
+                        title={video.title}
+                      >
+                        {video.title}
+                      </h3>
+                      <div className="flex items-center justify-between text-[11px] text-gray-400">
+                        <span className="truncate">{video.category || 'Anime'}</span>
+                        <span className="text-gray-400 font-medium shrink-0">
+                          {progress > 0 ? `${Math.round(progress)}% watched` : 'Continue'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div

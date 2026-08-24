@@ -820,6 +820,7 @@ export default function App() {
                     videos={watchHistoryItems.slice(0, 10)}
                     onSelectVideo={handleSelectVideo}
                     onViewAll={() => setActiveView('history')}
+                    isLandscape={true}
                   />
                 )}
 
