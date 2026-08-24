@@ -707,6 +707,10 @@ Subtitle track synchronized with live HLS playback
 
   // Vite middleware for development
   async function initDevServerAndListen() {
+    if (process.env.VERCEL) {
+      return;
+    }
+
     if (process.env.NODE_ENV !== 'production') {
       const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
@@ -722,11 +726,9 @@ Subtitle track synchronized with live HLS playback
       });
     }
 
-    if (!process.env.VERCEL) {
-      app.listen(PORT, '0.0.0.0', () => {
-        console.log(`AniTube Server running on http://0.0.0.0:${PORT}`);
-      });
-    }
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`AniTube Server running on http://0.0.0.0:${PORT}`);
+    });
   }
 
   initDevServerAndListen();
