@@ -144,6 +144,28 @@ const STUDIO_AVATARS: Record<string, string> = {
 const DEFAULT_REFERER = 'https://megaplay.buzz/';
 
 /**
+ * Safely fetches JSON from a URL without throwing SyntaxError when receiving HTML
+ * (e.g. Vercel SPA index.html 404/200 rewrites on static deployments).
+ */
+async function safeFetchJson<T = any>(url: string, init?: RequestInit): Promise<T | null> {
+  try {
+    const res = await fetch(url, init);
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      return null;
+    }
+    const text = await res.text();
+    if (!text || text.trim().startsWith('<')) {
+      return null;
+    }
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Builds a CORS-proxied URL for an .m3u8 playlist with the required Referer header.
  */
 export function buildProxiedM3u8Url(rawUrl: string, referer: string = DEFAULT_REFERER): string {
@@ -336,39 +358,12 @@ export async function fetchRecentAnime(page: number = 1, perPage: number = 10): 
   const proxyUrl = `/api/recent-anime?page=${page}&per_page=${perPage}`;
   const directUrl = `https://anikotoapi.site/recent-anime?page=${page}&per_page=${perPage}`;
 
-  let responseData: AnikotoResponse | null = null;
-  let lastError: Error | null = null;
+  let responseData: AnikotoResponse | null = await safeFetchJson<AnikotoResponse>(proxyUrl);
 
-  // 1. Try local proxy first
-  try {
-    const res = await fetch(proxyUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-    if (res.ok) {
-      responseData = await res.json();
-    }
-  } catch (err) {
-    lastError = err as Error;
-  }
-
-  // 2. Try direct URL fallback
   if (!responseData || !responseData.ok) {
-    try {
-      const res = await fetch(directUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-      if (res.ok) {
-        responseData = await res.json();
-      }
-    } catch (err) {
-      lastError = err as Error;
-    }
+    responseData = await safeFetchJson<AnikotoResponse>(directUrl, {
+      headers: { 'Accept': 'application/json' },
+    });
   }
 
   if (responseData && responseData.ok && Array.isArray(responseData.data)) {
@@ -410,7 +405,7 @@ export async function fetchRecentAnime(page: number = 1, perPage: number = 10): 
     console.warn('Category fallback in fetchRecentAnime failed:', catErr);
   }
 
-  throw new Error(lastError?.message || 'Failed to fetch recent anime catalogue');
+  throw new Error('Failed to fetch recent anime catalogue');
 }
 
 /**
@@ -424,55 +419,35 @@ export async function fetchAnimeStreamBySlug(
   preferredServer: 'hd-1' | 'hd-2' | string = 'hd-1',
   type: string = 'sub'
 ): Promise<AnimeStreamResult> {
-  const cleanSlug = slug.trim();
+  const cleanSlug = String(slug).replace(/^slug-/, '').replace(/^anime-/, '').trim();
   const server = preferredServer === 'hd-2' ? 'hd-2' : 'hd-1';
   const localProxyUrl = `/api/anime/slug-stream?id=${encodeURIComponent(cleanSlug)}&server=${server}&ep=${episode}&type=${type}`;
   const directApiUrl = `https://anikoto-api.vercel.app/api/stream?id=${encodeURIComponent(cleanSlug)}&server=${server}&ep=${episode}&type=${type}`;
 
-  let apiData: AnikotoSlugStreamResponse | null = null;
-  let lastError: Error | null = null;
-
   // 1. Try local proxy
-  try {
-    const res = await fetch(localProxyUrl);
-    if (res.ok) {
-      apiData = await res.json();
-    }
-  } catch (err) {
-    lastError = err as Error;
-  }
+  let apiData: AnikotoSlugStreamResponse | null = await safeFetchJson<AnikotoSlugStreamResponse>(localProxyUrl);
 
   // 2. Direct fallback
   if (!apiData || !apiData.success || !apiData.data) {
-    try {
-      const res = await fetch(directApiUrl, {
-        headers: { 'Accept': 'application/json' },
-      });
-      if (res.ok) {
-        apiData = await res.json();
-      }
-    } catch (err) {
-      lastError = err as Error;
-    }
+    apiData = await safeFetchJson<AnikotoSlugStreamResponse>(directApiUrl, {
+      headers: { 'Accept': 'application/json' },
+    });
   }
 
   // 3. Fallback to alternate server hd-2 if hd-1 failed
   if ((!apiData || !apiData.success || !apiData.data) && server === 'hd-1') {
-    try {
-      const fallbackUrl = `/api/anime/slug-stream?id=${encodeURIComponent(cleanSlug)}&server=hd-2&ep=${episode}&type=${type}`;
-      const res = await fetch(fallbackUrl);
-      if (res.ok) {
-        apiData = await res.json();
-      }
-    } catch (err) {
-      console.warn('Fallback to hd-2 slug server failed:', err);
+    const fallbackUrl = `/api/anime/slug-stream?id=${encodeURIComponent(cleanSlug)}&server=hd-2&ep=${episode}&type=${type}`;
+    apiData = await safeFetchJson<AnikotoSlugStreamResponse>(fallbackUrl);
+    if (!apiData || !apiData.success || !apiData.data) {
+      const directFallbackUrl = `https://anikoto-api.vercel.app/api/stream?id=${encodeURIComponent(cleanSlug)}&server=hd-2&ep=${episode}&type=${type}`;
+      apiData = await safeFetchJson<AnikotoSlugStreamResponse>(directFallbackUrl, {
+        headers: { 'Accept': 'application/json' },
+      });
     }
   }
 
   if (!apiData || !apiData.success || !apiData.data || !apiData.data.m3u8) {
-    throw new Error(
-      lastError?.message || `No stream found for slug "${cleanSlug}" on server ${server} (Episode ${episode})`
-    );
+    throw new Error(`No stream found for slug "${cleanSlug}" on server ${server} (Episode ${episode})`);
   }
 
   const data = apiData.data;
@@ -482,15 +457,17 @@ export async function fetchAnimeStreamBySlug(
   // Parse WebVTT Subtitles
   const parsedSubs: SubtitleTrack[] = [];
   if (Array.isArray(data.subtitles)) {
-    data.subtitles.forEach((sub) => {
+    data.subtitles.forEach((sub: any) => {
+      const subUrl = sub.file || sub.url;
+      if (!subUrl) return;
       const isEnglish =
         sub.default ||
         sub.label?.toLowerCase() === 'english' ||
         sub.label?.toLowerCase().includes('eng');
-      const proxiedVtt = buildProxiedVttUrl(sub.file, referer);
+      const proxiedVtt = buildProxiedVttUrl(subUrl, referer);
       parsedSubs.push({
-        lang: isEnglish ? 'en' : sub.label.toLowerCase().slice(0, 3),
-        label: sub.label,
+        lang: isEnglish ? 'en' : (sub.label ? sub.label.toLowerCase().slice(0, 3) : 'en'),
+        label: sub.label || 'English',
         url: proxiedVtt,
         format: 'vtt',
         isDefault: isEnglish,
@@ -508,7 +485,6 @@ export async function fetchAnimeStreamBySlug(
       : undefined;
 
   // Build default servers for slug stream (HD-1 and HD-2)
-  const activeServerName = server === 'hd-2' ? 'HD-2 (Sub)' : 'HD-1 (Sub)';
   const servers: StreamSource[] = [
     {
       serverName: 'HD-1 (Sub)',
@@ -556,40 +532,25 @@ export async function fetchAnimeStreamByMalId(
   episode: number = 1,
   fallbackSlug?: string
 ): Promise<AnimeStreamResult> {
-  const localProxyUrl = `/api/anime/stream/${malId}/${episode}${fallbackSlug ? `?slug=${encodeURIComponent(fallbackSlug)}` : ''}`;
-  const directApiUrl = `https://aniapikoto.vercel.app/api/anikoto/mal/${malId}/${episode}`;
+  const cleanMalId = String(malId).replace(/^mal-/, '').replace(/^anime-/, '').replace(/^slug-/, '').trim();
+  const cleanFallbackSlug = fallbackSlug ? String(fallbackSlug).replace(/^slug-/, '').replace(/^anime-/, '').trim() : undefined;
 
-  let apiData: any = null;
-  let lastError: Error | null = null;
+  const localProxyUrl = `/api/anime/stream/${cleanMalId}/${episode}${cleanFallbackSlug ? `?slug=${encodeURIComponent(cleanFallbackSlug)}` : ''}`;
+  const directApiUrl = `https://aniapikoto.vercel.app/api/anikoto/mal/${cleanMalId}/${episode}`;
 
-  // 1. Try internal server proxy route first
-  try {
-    const res = await fetch(localProxyUrl);
-    if (res.ok) {
-      apiData = await res.json();
-    }
-  } catch (err) {
-    lastError = err as Error;
-  }
+  let apiData: any = await safeFetchJson(localProxyUrl);
 
   // If server already returned a slug stream fallback
   if (apiData && apiData.isSlugStream && apiData.data) {
-    const slugToUse = apiData.slug || fallbackSlug || String(malId);
+    const slugToUse = apiData.slug || cleanFallbackSlug || cleanMalId;
     return fetchAnimeStreamBySlug(slugToUse, episode, apiData.server || 'hd-1');
   }
 
-  // 2. Direct fetch fallback if server route not reached
+  // Direct fetch fallback if server route not reached
   if (!apiData || !apiData.success || !apiData.data) {
-    try {
-      const res = await fetch(directApiUrl, {
-        headers: { 'Accept': 'application/json' },
-      });
-      if (res.ok) {
-        apiData = await res.json();
-      }
-    } catch (err) {
-      lastError = err as Error;
-    }
+    apiData = await safeFetchJson(directApiUrl, {
+      headers: { 'Accept': 'application/json' },
+    });
   }
 
   // Check if MAL data has active servers
@@ -597,20 +558,18 @@ export async function fetchAnimeStreamByMalId(
   const hasSsub = apiData?.data && Array.isArray(apiData.data.ssub) && apiData.data.ssub.length > 0;
   const hasDub = apiData?.data && Array.isArray(apiData.data.dub) && apiData.data.dub.length > 0;
   const hasAnyServer = hasSub || hasSsub || hasDub;
-  const discoveredSlug = apiData?.data?.slug || fallbackSlug;
+  const discoveredSlug = apiData?.data?.slug || cleanFallbackSlug;
 
-  // 3. Fallback to Slug API if no servers found on MAL ID
+  // Fallback to Slug API if no servers found on MAL ID
   if (!hasAnyServer && discoveredSlug) {
-    console.info(`No stream servers found for MAL ID ${malId}. Falling back to slug "${discoveredSlug}" with default hd-1/hd-2 servers.`);
     return fetchAnimeStreamBySlug(discoveredSlug, episode, 'hd-1');
   }
 
   if (!apiData || !apiData.success || !apiData.data || !hasAnyServer) {
-    // If fallback slug was passed, give it a final try
-    if (fallbackSlug) {
-      return fetchAnimeStreamBySlug(fallbackSlug, episode, 'hd-1');
+    if (cleanFallbackSlug) {
+      return fetchAnimeStreamBySlug(cleanFallbackSlug, episode, 'hd-1');
     }
-    throw new Error(lastError?.message || `No streaming sources found for MAL ID: ${malId}`);
+    throw new Error(`No streaming sources found for MAL ID: ${cleanMalId}`);
   }
 
   const data = apiData.data;
@@ -623,10 +582,12 @@ export async function fetchAnimeStreamByMalId(
       const parsedSubs: SubtitleTrack[] = [];
       if (Array.isArray(s.subtitles)) {
         s.subtitles.forEach((sub: any) => {
+          const subUrl = sub.url || sub.file;
+          if (!subUrl) return;
           const isEn =
             sub.lang?.toLowerCase() === 'en' ||
             sub.label?.toLowerCase().includes('eng');
-          const proxiedVtt = buildProxiedVttUrl(sub.url, DEFAULT_REFERER);
+          const proxiedVtt = buildProxiedVttUrl(subUrl, DEFAULT_REFERER);
           const track: SubtitleTrack = {
             lang: sub.lang || 'en',
             label: sub.label || 'English',
@@ -657,10 +618,12 @@ export async function fetchAnimeStreamByMalId(
       const parsedSubs: SubtitleTrack[] = [];
       if (Array.isArray(s.subtitles)) {
         s.subtitles.forEach((sub: any) => {
+          const subUrl = sub.url || sub.file;
+          if (!subUrl) return;
           const isEn =
             sub.lang?.toLowerCase() === 'en' ||
             sub.label?.toLowerCase().includes('eng');
-          const proxiedVtt = buildProxiedVttUrl(sub.url, DEFAULT_REFERER);
+          const proxiedVtt = buildProxiedVttUrl(subUrl, DEFAULT_REFERER);
           const track: SubtitleTrack = {
             lang: sub.lang || 'en',
             label: sub.label || 'English',
@@ -702,14 +665,12 @@ export async function fetchAnimeStreamByMalId(
     if (discoveredSlug) {
       return fetchAnimeStreamBySlug(discoveredSlug, episode, 'hd-1');
     }
-    throw new Error(`No active streaming servers found for MAL ID ${malId}`);
+    throw new Error(`No active streaming servers found for MAL ID ${cleanMalId}`);
   }
 
-  // Primary stream is the first available server
   const primaryServer = servers[0];
   const proxiedM3u8 = buildProxiedM3u8Url(primaryServer.m3u8, DEFAULT_REFERER);
 
-  // Find automatic English VTT subtitle track
   const defaultEnglishVtt =
     allSubtitles.find((s) => s.isDefault) ||
     primaryServer.subtitles.find((s) => s.isDefault) ||
@@ -741,21 +702,28 @@ export async function fetchAnimeStream({
   episode?: number;
   preferredServer?: string;
 }): Promise<AnimeStreamResult> {
-  // If MAL ID is available, try MAL ID with slug fallback
-  if (malId && /^\d+$/.test(String(malId))) {
+  const cleanSlug = slug
+    ? String(slug).replace(/^slug-/, '').replace(/^anime-/, '').trim()
+    : undefined;
+  const rawMalIdStr = malId
+    ? String(malId).replace(/^slug-/, '').replace(/^anime-/, '').replace(/^mal-/, '').trim()
+    : undefined;
+
+  const finalSlug = cleanSlug || (rawMalIdStr && !/^\d+$/.test(rawMalIdStr) ? rawMalIdStr : undefined);
+  const numericMalId = rawMalIdStr && /^\d+$/.test(rawMalIdStr) ? Number(rawMalIdStr) : undefined;
+
+  if (numericMalId) {
     try {
-      return await fetchAnimeStreamByMalId(malId, episode, slug);
+      return await fetchAnimeStreamByMalId(numericMalId, episode, finalSlug);
     } catch (malErr) {
-      if (slug) {
-        console.warn(`MAL stream fetch failed, falling back to slug ${slug}:`, malErr);
-        return await fetchAnimeStreamBySlug(slug, episode, preferredServer);
+      if (finalSlug) {
+        return await fetchAnimeStreamBySlug(finalSlug, episode, preferredServer);
       }
       throw malErr;
     }
   }
 
-  // If no numeric MAL ID, use slug directly
-  const targetSlug = slug || (malId ? String(malId) : '');
+  const targetSlug = finalSlug || rawMalIdStr || '';
   if (!targetSlug) {
     throw new Error('Either MAL ID or Anime Slug is required to fetch a stream');
   }
@@ -854,35 +822,16 @@ export async function fetchAnikotoCategory(
   const localProxy = `/api/anime/category/${category}`;
   const directApi = `https://anikoto-api.vercel.app/api/${category}`;
 
-  let jsonResult: { success: boolean; data: AnikotoCategoryItem[] } | null = null;
-  let lastErr: Error | null = null;
+  let jsonResult: { success: boolean; data: AnikotoCategoryItem[] } | null = await safeFetchJson(localProxy);
 
-  // 1. Try local proxy
-  try {
-    const res = await fetch(localProxy);
-    if (res.ok) {
-      jsonResult = await res.json();
-    }
-  } catch (err) {
-    lastErr = err as Error;
-  }
-
-  // 2. Direct fetch fallback
   if (!jsonResult || !jsonResult.success || !Array.isArray(jsonResult.data)) {
-    try {
-      const res = await fetch(directApi, {
-        headers: { 'Accept': 'application/json' },
-      });
-      if (res.ok) {
-        jsonResult = await res.json();
-      }
-    } catch (err) {
-      lastErr = err as Error;
-    }
+    jsonResult = await safeFetchJson(directApi, {
+      headers: { 'Accept': 'application/json' },
+    });
   }
 
   if (!jsonResult || !jsonResult.success || !Array.isArray(jsonResult.data)) {
-    throw new Error(lastErr?.message || `Failed to fetch anime category: ${category}`);
+    throw new Error(`Failed to fetch anime category: ${category}`);
   }
 
   return jsonResult.data;
@@ -915,14 +864,16 @@ export async function fetchCompletedAnime(): Promise<Video[]> {
 
 export async function fetchAnimeSearch(keyword: string, page: number = 1): Promise<{ videos: Video[], totalPages: number }> {
   const localProxy = `/api/anime/search?keyword=${encodeURIComponent(keyword)}&page=${page}`;
+  const directApi = `https://anikoto-api.vercel.app/api/search?keyword=${encodeURIComponent(keyword)}&page=${page}`;
   
-  const res = await fetch(localProxy);
-  if (!res.ok) {
-    throw new Error(`Search failed with status ${res.status}`);
+  let jsonResult: any = await safeFetchJson(localProxy);
+  if (!jsonResult || !jsonResult.success || !Array.isArray(jsonResult.data)) {
+    jsonResult = await safeFetchJson(directApi, {
+      headers: { 'Accept': 'application/json' },
+    });
   }
-  
-  const jsonResult = await res.json();
-  if (!jsonResult.success || !Array.isArray(jsonResult.data)) {
+
+  if (!jsonResult || !jsonResult.success || !Array.isArray(jsonResult.data)) {
     throw new Error('Invalid search response');
   }
   
@@ -939,26 +890,19 @@ export async function fetchAnimeSearch(keyword: string, page: number = 1): Promi
  * Endpoint: https://anikoto-api.vercel.app/api/info?id={slug}
  */
 export async function fetchAnimeInfo(slugOrId: string): Promise<AnimeInfoData> {
-  const localProxy = `/api/anime/info?id=${encodeURIComponent(slugOrId)}`;
-  
-  const res = await fetch(localProxy);
-  if (!res.ok) {
-    // Direct upstream fallback
-    const directUrl = `https://anikoto-api.vercel.app/api/info?id=${encodeURIComponent(slugOrId)}`;
-    const directRes = await fetch(directUrl);
-    if (!directRes.ok) {
-      throw new Error(`Failed to fetch anime info for ${slugOrId}`);
-    }
-    const directJson = await directRes.json();
-    if (!directJson.success || !directJson.data) {
-      throw new Error('Invalid anime info response');
-    }
-    return directJson.data;
+  const cleanId = String(slugOrId).replace(/^slug-/, '').replace(/^anime-/, '').trim();
+  const localProxy = `/api/anime/info?id=${encodeURIComponent(cleanId)}`;
+  const directUrl = `https://anikoto-api.vercel.app/api/info?id=${encodeURIComponent(cleanId)}`;
+
+  let json: any = await safeFetchJson(localProxy);
+  if (!json || !json.success || !json.data) {
+    json = await safeFetchJson(directUrl, {
+      headers: { 'Accept': 'application/json' },
+    });
   }
 
-  const json = await res.json();
-  if (!json.success || !json.data) {
-    throw new Error('Invalid anime info response');
+  if (!json || !json.success || !json.data) {
+    throw new Error(`Failed to fetch anime info for ${cleanId}`);
   }
 
   return json.data;
@@ -971,18 +915,26 @@ export async function fetchAnimeInfo(slugOrId: string): Promise<AnimeInfoData> {
 export async function fetchAnimeByGenre(genre: string, page: number = 1): Promise<{ videos: Video[], totalPages: number, genre: string }> {
   const formattedGenre = genre.toLowerCase().trim().replace(/\s+/g, '-');
   const localProxy = `/api/anime/genre/${encodeURIComponent(formattedGenre)}?page=${page}`;
+  const directUrl = `https://anikototvapi.vercel.app/api/genre/${encodeURIComponent(formattedGenre)}?page=${page}`;
 
-  const res = await fetch(localProxy);
-  if (!res.ok) {
-    // Direct upstream fallback
-    const directUrl = `https://anikototvapi.vercel.app/api/genre/${encodeURIComponent(formattedGenre)}?page=${page}`;
-    const directRes = await fetch(directUrl);
-    if (!directRes.ok) {
-      throw new Error(`Failed to fetch genre ${genre}`);
-    }
-    const directData = await directRes.json();
-    if (directData.success && directData.results && Array.isArray(directData.results.data)) {
-      const videos = directData.results.data.map((item: any) => {
+  let json: any = await safeFetchJson(localProxy);
+
+  if (!json || (!json.success && !json.results)) {
+    json = await safeFetchJson(directUrl, {
+      headers: { 'Accept': 'application/json' },
+    });
+  }
+
+  if (json) {
+    if (json.success && Array.isArray(json.data)) {
+      const videos = json.data.map((it: AnikotoCategoryItem) => transformAnikotoCategoryItemToVideo(it, genre));
+      return {
+        videos,
+        totalPages: json.totalPages || 1,
+        genre: json.genre || formattedGenre,
+      };
+    } else if (json.results && Array.isArray(json.results.data)) {
+      const videos = json.results.data.map((item: any) => {
         let id = item.slug || '';
         if (id.includes('/')) id = id.split('/')[0];
         return transformAnikotoCategoryItemToVideo({
@@ -997,25 +949,13 @@ export async function fetchAnimeByGenre(genre: string, page: number = 1): Promis
       });
       return {
         videos,
-        totalPages: directData.results.totalPages || 1,
+        totalPages: json.results.totalPages || 1,
         genre: formattedGenre,
       };
     }
-    throw new Error('Invalid genre response format');
   }
 
-  const json = await res.json();
-  if (!json.success || !Array.isArray(json.data)) {
-    throw new Error('Invalid genre data format');
-  }
-
-  const videos = json.data.map((it: AnikotoCategoryItem) => transformAnikotoCategoryItemToVideo(it, genre));
-
-  return {
-    videos,
-    totalPages: json.totalPages || 1,
-    genre: json.genre || formattedGenre,
-  };
+  throw new Error(`Failed to fetch genre ${genre}`);
 }
 
 /**
@@ -1035,18 +975,12 @@ export async function fetchAnimeEpisodesMetadata(
   if (season !== undefined) params.set('season', String(season));
 
   const localProxy = `/api/anime/metadata/${anilistId}${params.toString() ? `?${params.toString()}` : ''}`;
+  const directUrl = `https://anime-metadata-api.vercel.app/api/episodes/${anilistId}${params.toString() ? `?${params.toString()}` : ''}`;
 
   try {
-    const res = await fetch(localProxy);
-    let data;
-    if (res.ok) {
-      data = await res.json();
-    } else {
-      const directUrl = `https://anime-metadata-api.vercel.app/api/episodes/${anilistId}${params.toString() ? `?${params.toString()}` : ''}`;
-      const directRes = await fetch(directUrl);
-      if (directRes.ok) {
-        data = await directRes.json();
-      }
+    let data = await safeFetchJson(localProxy);
+    if (!data || !data.success || !data.data) {
+      data = await safeFetchJson(directUrl);
     }
 
     if (data && data.success && data.data) {
