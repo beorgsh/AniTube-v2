@@ -12,6 +12,8 @@ import { WatchHistoryView } from './components/WatchHistoryView';
 import { LandingPage } from './components/LandingPage';
 import { AvatarSetupModal } from './components/AvatarSetupModal';
 import { VoiceSearchModal } from './components/VoiceSearchModal';
+import { DeveloperPanel } from './components/DeveloperPanel';
+import { devLogger } from './services/devLogger';
 import { MOCK_VIDEOS, CATEGORIES } from './data/mockVideos';
 import { Video, ViewMode } from './types';
 import { 
@@ -55,6 +57,9 @@ export default function App() {
   const [showLanding, setShowLanding] = useState<boolean>(() => !getHasVisitedLanding());
   const [userProfile, setUserProfile] = useState<UserProfile>(() => getUserProfile());
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState<boolean>(false);
+
+  // Developer Mode Diagnostics State
+  const [isDevMode, setIsDevMode] = useState<boolean>(() => devLogger.isDevMode());
 
   // Watch Later, Liked Items, and Watch History State from Session Storage
   const [watchLaterItems, setWatchLaterItems] = useState<Video[]>([]);
@@ -101,8 +106,16 @@ export default function App() {
       setUserProfile(getUserProfile());
     };
 
+    const handleDevModeChange = (e: any) => {
+      setIsDevMode(e.detail?.enabled ?? devLogger.isDevMode());
+    };
+
     window.addEventListener('anitube_storage_update', handleStorageUpdate);
-    return () => window.removeEventListener('anitube_storage_update', handleStorageUpdate);
+    window.addEventListener('anitube_dev_mode_changed', handleDevModeChange);
+    return () => {
+      window.removeEventListener('anitube_storage_update', handleStorageUpdate);
+      window.removeEventListener('anitube_dev_mode_changed', handleDevModeChange);
+    };
   }, []);
 
   // Sentinel ref for infinite scroll / lazy loading
@@ -431,6 +444,12 @@ export default function App() {
             onLogoClick={() => setShowLanding(true)}
             userProfile={userProfile}
             onOpenAvatarModal={() => setIsAvatarModalOpen(true)}
+            isDevMode={isDevMode}
+            onToggleDevMode={() => {
+              const next = !isDevMode;
+              devLogger.setDevMode(next);
+              setIsDevMode(next);
+            }}
           />
 
           {/* Main Layout Area */}
@@ -974,6 +993,16 @@ export default function App() {
           setShowLanding(false);
         }}
       />
+
+      {/* Developer Diagnostics Floating Panel */}
+      {isDevMode && (
+        <DeveloperPanel
+          onClose={() => {
+            devLogger.setDevMode(false);
+            setIsDevMode(false);
+          }}
+        />
+      )}
     </div>
   );
 }

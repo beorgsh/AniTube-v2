@@ -213,10 +213,46 @@ export function saveWatchHistoryList(list: Video[]): void {
 
 export function addToWatchHistory(video: Video): void {
   const list = getWatchHistoryList();
+  const existing = list.find(item => item.id === video.id || (video.slug ? item.slug === video.slug : false));
+  
   // Filter out existing occurrence if present so it moves to top
   const filtered = list.filter(item => item.id !== video.id && (video.slug ? item.slug !== video.slug : true));
-  const updated = [video, ...filtered];
+  
+  const updatedVideo: Video = {
+    ...video,
+    currentTime: video.currentTime ?? existing?.currentTime,
+    durationSeconds: video.durationSeconds ?? existing?.durationSeconds,
+    progressPercent: video.progressPercent ?? existing?.progressPercent,
+  };
+
+  const updated = [updatedVideo, ...filtered];
   saveWatchHistoryList(updated);
+}
+
+export function updateWatchProgress(
+  videoIdOrSlug: string,
+  currentTime: number,
+  durationSeconds: number,
+  episodeNumber?: number
+): void {
+  if (!videoIdOrSlug || !durationSeconds || durationSeconds <= 0) return;
+  const progressPercent = Math.min(100, Math.max(0, Math.round((currentTime / durationSeconds) * 100)));
+
+  const list = getWatchHistoryList();
+  const index = list.findIndex(
+    item => item.id === videoIdOrSlug || item.slug === videoIdOrSlug || (item.malId && String(item.malId) === videoIdOrSlug)
+  );
+
+  if (index >= 0) {
+    list[index] = {
+      ...list[index],
+      currentTime: Math.floor(currentTime),
+      durationSeconds: Math.floor(durationSeconds),
+      progressPercent,
+      episodeNumber: episodeNumber || list[index].episodeNumber,
+    };
+    saveWatchHistoryList(list);
+  }
 }
 
 export function removeFromWatchHistory(videoId: string): void {

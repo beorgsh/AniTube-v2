@@ -9,6 +9,7 @@ interface VideoPlayerProps {
   poster?: string;
   autoPlay?: boolean;
   onEnded?: () => void;
+  onTimeUpdate?: (currentTime: number, duration: number) => void;
   title?: string;
   subtitles?: SubtitleTrack[];
   servers?: StreamSource[];
@@ -28,6 +29,7 @@ export const VideoPlayer = ({
   poster,
   autoPlay = true,
   onEnded,
+  onTimeUpdate,
   title,
   subtitles = [],
   servers = [],
@@ -45,6 +47,8 @@ export const VideoPlayer = ({
   const playerRef = useRef<Player | null>(null);
   const lastStreamUrlRef = useRef<string>('');
   const onEndedRef = useRef(onEnded);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const lastProgressReportTimeRef = useRef<number>(0);
 
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -52,10 +56,14 @@ export const VideoPlayer = ({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaybackReady, setIsPlaybackReady] = useState(false);
 
-  // Keep onEnded ref in sync without triggering effects
+  // Keep refs in sync without triggering re-render effects
   useEffect(() => {
     onEndedRef.current = onEnded;
   }, [onEnded]);
+
+  useEffect(() => {
+    onTimeUpdateRef.current = onTimeUpdate;
+  }, [onTimeUpdate]);
 
   // Immediately pause and stop background audio when streamUrl is cleared or loading
   useEffect(() => {
@@ -262,9 +270,14 @@ export const VideoPlayer = ({
     player.on('timeupdate', () => {
       try {
         const time = player.currentTime() || 0;
+        const dur = player.duration() || 0;
         setCurrentTime(time);
         if (time > 0.05) {
           setIsPlaybackReady(true);
+        }
+        if (dur > 0 && onTimeUpdateRef.current && Math.abs(time - lastProgressReportTimeRef.current) >= 1) {
+          lastProgressReportTimeRef.current = time;
+          onTimeUpdateRef.current(time, dur);
         }
       } catch {
         // ignore

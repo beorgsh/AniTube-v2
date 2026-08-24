@@ -37,7 +37,8 @@ import {
   toggleWatchLater, 
   isEpisodeLiked, 
   toggleLikedEpisode,
-  addToWatchHistory
+  addToWatchHistory,
+  updateWatchProgress
 } from '../services/sessionStorage';
 
 interface WatchViewProps {
@@ -597,6 +598,10 @@ export const WatchView = ({
               outro={currentOutro}
               sourceType={sourceType}
               onEnded={handleVideoEnded}
+              onTimeUpdate={(time, dur) => {
+                const targetKey = activeSlug || video.slug || video.id;
+                updateWatchProgress(targetKey, time, dur, currentEpisode);
+              }}
             />
           </div>
 

@@ -8,7 +8,8 @@ import {
   User,
   Settings,
   HelpCircle,
-  Moon
+  Moon,
+  Terminal
 } from 'lucide-react';
 
 import { UserProfile } from '../services/sessionStorage';
@@ -23,6 +24,8 @@ interface HeaderProps {
   onLogoClick?: () => void;
   userProfile?: UserProfile;
   onOpenAvatarModal?: () => void;
+  isDevMode?: boolean;
+  onToggleDevMode?: () => void;
 }
 
 export const Header = ({
@@ -34,6 +37,8 @@ export const Header = ({
   onLogoClick,
   userProfile,
   onOpenAvatarModal,
+  isDevMode = false,
+  onToggleDevMode,
 }: HeaderProps) => {
 
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -291,9 +296,31 @@ export const Header = ({
                   <Moon className="w-4 h-4 text-gray-400" />
                   <span>Appearance: Dark Mode (Fixed)</span>
                 </div>
-                <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2d2d2d] cursor-pointer">
+                {onToggleDevMode && (
+                  <div 
+                    onClick={() => {
+                      onToggleDevMode();
+                    }}
+                    className="flex items-center justify-between px-4 py-2.5 hover:bg-[#2d2d2d] cursor-pointer text-emerald-400 font-medium transition-colors"
+                    title="Toggle Floating Developer Diagnostics & Network Inspector"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Terminal className="w-4 h-4 text-emerald-400" />
+                      <span>Developer Diagnostics</span>
+                    </div>
+                    <div className={`w-8 h-4 rounded-full transition-colors p-0.5 flex items-center ${isDevMode ? 'bg-emerald-500 justify-end' : 'bg-[#444] justify-start'}`}>
+                      <div className="w-3 h-3 rounded-full bg-white shadow-sm" />
+                    </div>
+                  </div>
+                )}
+                <div 
+                  onClick={() => {
+                    if (onToggleDevMode) onToggleDevMode();
+                  }}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2d2d2d] cursor-pointer"
+                >
                   <Settings className="w-4 h-4 text-gray-400" />
-                  <span>Settings</span>
+                  <span>Settings {isDevMode ? '(Dev Active)' : ''}</span>
                 </div>
                 <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#2d2d2d] cursor-pointer">
                   <HelpCircle className="w-4 h-4 text-gray-400" />

@@ -32,10 +32,12 @@
 
 /* Video.js YouTube Dark Theme Overrides */
 .video-js {
-  font-family: "Roboto", "YouTube Sans", sans-serif;
+  font-family: "Roboto", "YouTube Sans", -apple-system, BlinkMacSystemFont, sans-serif;
   width: 100% !important;
   height: 100% !important;
   background-color: #000;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .video-js .vjs-tech {
@@ -46,48 +48,90 @@
   top: 50% !important;
   left: 50% !important;
   transform: translate(-50%, -50%);
-  background-color: rgba(15, 15, 15, 0.85) !important;
+  background-color: rgba(28, 28, 28, 0.85) !important;
   border: none !important;
   border-radius: 50% !important;
-  width: 72px !important;
-  height: 72px !important;
-  line-height: 72px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-  transition: all 0.2s ease;
+  width: 68px !important;
+  height: 68px !important;
+  line-height: 68px !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.video-js .vjs-big-play-button .vjs-icon-placeholder:before {
+  color: #ffffff;
+  font-size: 32px;
+  line-height: 68px;
 }
 
 .video-js:hover .vjs-big-play-button {
   background-color: #ff0000 !important;
-  transform: translate(-50%, -50%) scale(1.1);
+  transform: translate(-50%, -50%) scale(1.08);
 }
 
 .video-js .vjs-control-bar {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.4), transparent) !important;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 60%, transparent 100%) !important;
   height: 48px !important;
   display: flex !important;
   align-items: center !important;
-  padding: 0 12px !important;
+  padding: 0 8px !important;
+}
+
+.video-js .vjs-progress-control {
+  position: absolute !important;
+  left: 12px !important;
+  right: 12px !important;
+  top: -12px !important;
+  width: calc(100% - 24px) !important;
+  height: 14px !important;
+}
+
+.video-js .vjs-progress-holder {
+  height: 4px !important;
+  transition: height 0.15s ease;
+}
+
+.video-js .vjs-progress-control:hover .vjs-progress-holder {
+  height: 7px !important;
 }
 
 .video-js .vjs-play-progress {
   background-color: #ff0000 !important;
 }
 
+.video-js .vjs-play-progress::before {
+  content: '' !important;
+  position: absolute !important;
+  right: -6px !important;
+  top: 50% !important;
+  transform: translateY(-50%) scale(0);
+  width: 13px !important;
+  height: 13px !important;
+  background-color: #ff0000 !important;
+  border-radius: 50% !important;
+  transition: transform 0.15s ease !important;
+  box-shadow: 0 0 6px rgba(0,0,0,0.5);
+}
+
+.video-js .vjs-progress-control:hover .vjs-play-progress::before {
+  transform: translateY(-50%) scale(1) !important;
+}
+
 .video-js .vjs-slider {
-  background-color: rgba(255, 255, 255, 0.25) !important;
+  background-color: rgba(255, 255, 255, 0.2) !important;
   border-radius: 2px;
 }
 
 .video-js .vjs-load-progress {
-  background: rgba(255, 255, 255, 0.4) !important;
+  background: rgba(255, 255, 255, 0.35) !important;
 }
 
 .video-js .vjs-volume-level {
   background-color: #ffffff !important;
 }
 
-.video-js .vjs-progress-control:hover .vjs-progress-holder {
-  font-size: 1.4em;
+.video-js .vjs-text-track-display {
+  bottom: 50px !important;
 }
 
 /* Custom utility for clamping text */

@@ -15,6 +15,14 @@ interface WatchHistoryViewProps {
   onRefresh: () => void;
 }
 
+// Helper to format seconds to M:SS or MM:SS
+function formatWatchTime(seconds?: number): string {
+  if (!seconds || isNaN(seconds) || seconds <= 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 export const WatchHistoryView: React.FC<WatchHistoryViewProps> = ({
   historyItems,
   onSelectVideo,
@@ -207,7 +215,7 @@ export const WatchHistoryView: React.FC<WatchHistoryViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {historyItems.map((video) => {
             const isSelected = selectedIds.includes(video.id);
 
@@ -221,14 +229,14 @@ export const WatchHistoryView: React.FC<WatchHistoryViewProps> = ({
                     onSelectVideo(video);
                   }
                 }}
-                className={`group relative flex items-center justify-between gap-4 p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                className={`group relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl border transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-blue-950/20 border-blue-500/60 ring-1 ring-blue-500/40'
                     : 'bg-[#161616] border-[#262626] hover:bg-[#1f1f1f] hover:border-[#383838]'
                 }`}
               >
-                <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                  {/* Select Checkbox (always visible in multi-select mode) */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 min-w-0 flex-1 w-full">
+                  {/* Select Checkbox (visible in multi-select mode) */}
                   {isSelectMode && (
                     <button
                       type="button"
@@ -236,7 +244,7 @@ export const WatchHistoryView: React.FC<WatchHistoryViewProps> = ({
                         e.stopPropagation();
                         toggleSelectItem(video.id);
                       }}
-                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors shrink-0 ${
+                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors shrink-0 self-center ${
                         isSelected
                           ? 'bg-blue-600 text-white'
                           : 'border-2 border-gray-500 hover:border-gray-300'
@@ -246,65 +254,88 @@ export const WatchHistoryView: React.FC<WatchHistoryViewProps> = ({
                     </button>
                   )}
 
-                  {/* Thumbnail Image */}
-                  <div className="relative w-28 sm:w-36 aspect-video rounded-xl overflow-hidden shrink-0 bg-[#222222]">
+                  {/* 16:9 Landscape Poster Thumbnail Container */}
+                  <div className="relative w-full sm:w-60 md:w-72 aspect-video rounded-xl overflow-hidden shrink-0 bg-[#222222] shadow-lg group-hover:shadow-2xl transition-shadow">
                     <FadeImage
-                      src={video.thumbnail}
+                      src={video.thumbnail || video.poster}
                       alt={video.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                      <div className="w-8 h-8 rounded-full bg-red-600/90 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:scale-105">
-                        <Play className="w-4 h-4 fill-current ml-0.5" />
+                    
+                    {/* Play Button Overlay */}
+                    <div className="absolute inset-0 bg-black/25 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-red-600/90 text-white flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity transform group-hover:scale-110 shadow-lg">
+                        <Play className="w-5 h-5 fill-current ml-0.5" />
                       </div>
                     </div>
+
+                    {/* EP Badge on top-left of poster */}
                     {video.episodeNumber && (
-                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-red-600/90 text-[10px] font-extrabold text-white shadow-md">
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-red-600/90 backdrop-blur-sm text-[10px] font-extrabold text-white shadow-md border border-red-500/50 z-10">
                         EP {video.episodeNumber}
                       </span>
                     )}
-                    {video.duration && (
-                      <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-semibold text-white">
-                        {video.duration}
-                      </span>
+
+                    {/* Duration / Progress Time Badge on bottom-right of poster */}
+                    <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-sm text-[10px] font-mono font-bold text-white z-10 border border-white/10 shadow-md">
+                      {video.currentTime && video.durationSeconds
+                        ? `${formatWatchTime(video.currentTime)} / ${formatWatchTime(video.durationSeconds)}`
+                        : video.duration || '24:00'}
+                    </div>
+
+                    {/* RED YOUTUBE PROGRESS BAR AT BOTTOM OF POSTER OVERLAY */}
+                    {typeof video.progressPercent === 'number' && video.progressPercent > 0 && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/60 overflow-hidden z-20">
+                        <div
+                          className="h-full bg-red-600 transition-all duration-300 shadow-sm"
+                          style={{ width: `${Math.min(100, Math.max(3, video.progressPercent))}%` }}
+                        />
+                      </div>
                     )}
                   </div>
 
                   {/* Info Details */}
-                  <div className="min-w-0 flex-1 space-y-1">
+                  <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#272727] text-gray-300 border border-[#383838]">
                         {video.category}
                       </span>
+
                       {video.episodeNumber && (
                         <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-950/70 text-red-400 border border-red-800/50">
-                          Last Watched: EP {video.episodeNumber}
+                          Episode {video.episodeNumber}
                         </span>
                       )}
-                      {video.totalEpisodes && (
-                        <span className="text-[10px] text-gray-400 font-medium">
-                          {video.totalEpisodes}
+
+                      {typeof video.progressPercent === 'number' && video.progressPercent > 0 && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/50">
+                          {video.progressPercent}% Watched
                         </span>
                       )}
                     </div>
-                    <h3 className="text-sm sm:text-base font-bold text-white truncate group-hover:text-red-400 transition-colors">
+
+                    <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-red-400 transition-colors leading-snug line-clamp-2">
                       {video.title}
                     </h3>
-                    <p className="text-xs text-gray-400 line-clamp-1 hidden sm:block">
+
+                    <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
                       {video.description}
                     </p>
-                    <div className="text-[11px] text-gray-500 font-medium">
-                      Watched in AniTube Player
+
+                    <div className="flex items-center gap-2 pt-1 text-[11px] text-gray-500 font-medium">
+                      <span>{video.channel?.name || 'AniTube Player'}</span>
+                      <span>•</span>
+                      <span>Watched in HD Stream</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Right side individual Delete Action */}
+                {/* Individual Delete Button */}
                 {!isSelectMode && (
                   <button
                     onClick={(e) => promptDeleteSingle(video, e)}
                     title="Remove from Watch History"
-                    className="p-2.5 rounded-xl bg-[#222222] hover:bg-red-950/60 text-gray-400 hover:text-red-400 border border-[#333] hover:border-red-800/60 transition-all cursor-pointer shrink-0 opacity-80 group-hover:opacity-100"
+                    className="p-2.5 rounded-xl bg-[#222222] hover:bg-red-950/60 text-gray-400 hover:text-red-400 border border-[#333] hover:border-red-800/60 transition-all cursor-pointer shrink-0 self-start sm:self-center opacity-80 group-hover:opacity-100"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

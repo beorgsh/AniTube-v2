@@ -305,8 +305,31 @@ export function transformAnimeToVideo(anime: AnikotoAnime, index: number): Video
     ? anime.description
     : `Watch the latest episodes of ${anime.title} with high-definition multi-bitrate HLS streams on AniTube.\n\nStatus: ${anime.status || 'Airing'}\nEpisodes: ${anime.episodes || 'Ongoing'}\nAired: ${anime.aired || '2026'}\nScore: ${anime.score || 'N/A'}`;
 
-  const rawEpisodes = anime.episodes ? parseInt(anime.episodes, 10) : (anime.is_sub || 1);
-  const latestEp = !isNaN(rawEpisodes) && rawEpisodes > 0 ? rawEpisodes : 1;
+  // Determine current uploaded episode: prioritize is_sub / episode / sub over total episodes count
+  let currentUploadedEp = 0;
+  if (typeof anime.is_sub === 'number' && anime.is_sub > 0) {
+    currentUploadedEp = anime.is_sub;
+  } else if (typeof (anime as any).is_sub === 'string' && /^\d+$/.test((anime as any).is_sub)) {
+    currentUploadedEp = parseInt((anime as any).is_sub, 10);
+  } else if (typeof (anime as any).episode === 'number' && (anime as any).episode > 0) {
+    currentUploadedEp = (anime as any).episode;
+  } else if (typeof (anime as any).episode === 'string' && /^\d+$/.test((anime as any).episode)) {
+    currentUploadedEp = parseInt((anime as any).episode, 10);
+  } else if (typeof (anime as any).sub === 'number' && (anime as any).sub > 0) {
+    currentUploadedEp = (anime as any).sub;
+  } else if (typeof (anime as any).sub === 'string' && /^\d+$/.test((anime as any).sub)) {
+    currentUploadedEp = parseInt((anime as any).sub, 10);
+  }
+
+  // Fallback to anime.episodes only if no uploaded episode field is found
+  if (currentUploadedEp <= 0 && anime.episodes) {
+    const parsedTotal = parseInt(anime.episodes, 10);
+    if (!isNaN(parsedTotal) && parsedTotal > 0) {
+      currentUploadedEp = parsedTotal;
+    }
+  }
+
+  const latestEp = currentUploadedEp > 0 ? currentUploadedEp : 1;
   const rawTitle = anime.title || anime.titles || anime.alternative || 'Untitled Anime';
   const cleanTitle = rawTitle.replace(/:\s*EP\s*\d+/i, '').replace(/\s*-\s*Episode\s*\d+/i, '').replace(/\s*EP\s*\d+/i, '').trim();
   const formattedTitle = latestEp > 0 ? `${cleanTitle}: EP ${latestEp}` : cleanTitle;

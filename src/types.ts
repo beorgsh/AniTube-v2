@@ -73,6 +73,9 @@ export interface Video {
   isDisliked?: boolean;
   commentsCount: string;
   comments: Comment[];
+  currentTime?: number;
+  durationSeconds?: number;
+  progressPercent?: number;
   isLive?: boolean;
   isShort?: boolean;
 }
