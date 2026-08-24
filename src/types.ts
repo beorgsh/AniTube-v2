@@ -101,6 +101,7 @@ export interface AnimeEpisodeDetail {
   isFiller?: boolean;
   rating?: string;
   hasAired?: boolean;
+  isAvailable?: boolean;
 }
 
 export interface AnimeSeasonItem {

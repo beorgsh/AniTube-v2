@@ -95,6 +95,8 @@ export const WatchView = ({
   const serverDropdownRef = useRef<HTMLDivElement | null>(null);
   const streamSettingsRef = useRef<HTMLDivElement | null>(null);
   const toastTimeoutRef = useRef<any>(null);
+  const currentPlayerTime = useRef<number>(0);
+  const [serverSwitchTime, setServerSwitchTime] = useState<number>(0);
 
   const showToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -195,6 +197,7 @@ export const WatchView = ({
 
   // Fetch Stream ONLY on video or episode change
   useEffect(() => {
+    setServerSwitchTime(0);
     const targetKey = activeSlug || video.slug || video.id;
     setIsLiked(isEpisodeLiked(targetKey, currentEpisode));
     setIsDisliked(video.isDisliked || false);
@@ -325,6 +328,7 @@ export const WatchView = ({
   // Handle switching streaming server
   const handleSelectServer = async (index: number) => {
     if (!servers[index]) return;
+    setServerSwitchTime(currentPlayerTime.current);
     setActiveServerIndex(index);
     setIsServerDropdownOpen(false);
     const targetServer = servers[index];
@@ -481,19 +485,24 @@ export const WatchView = ({
     const epArrayCount = Array.isArray(animeInfo?.episodes) ? animeInfo.episodes.length : 0;
     const metaCount = episodesMetadata.length;
 
+    // Determine latest uploaded episode
+    const latestAvailableEpisode = Math.max(metaCount, parsedSub, parsedDub, epArrayCount, currentEpisode);
+    
     // Detect highest known count, defaulting to at least currentEpisode or 12
-    const totalCount = Math.max(metaCount, parsedSub, parsedDub, parsedVideoEp, epArrayCount, currentEpisode, 12);
+    const totalCount = Math.max(latestAvailableEpisode, parsedVideoEp, 12);
     const countClamped = Math.min(Math.max(totalCount, 1), 2000);
 
     const defaultFallbackImage = animeBannerOrFanart || video.thumbnail;
 
     const list: AnimeEpisodeDetail[] = [];
     for (let i = 1; i <= countClamped; i++) {
+      const isAvailable = i <= latestAvailableEpisode;
       const foundMeta = episodesMetadata.find(m => m.number === i);
       if (foundMeta) {
         list.push({
           ...foundMeta,
           image: (foundMeta.image && foundMeta.image.trim().length > 0) ? foundMeta.image : defaultFallbackImage,
+          isAvailable,
         });
       } else {
         list.push({
@@ -501,6 +510,7 @@ export const WatchView = ({
           number: i,
           title: `Episode ${i}`,
           image: defaultFallbackImage,
+          isAvailable,
         });
       }
     }
@@ -597,8 +607,10 @@ export const WatchView = ({
               intro={currentIntro}
               outro={currentOutro}
               sourceType={sourceType}
+              initialTime={serverSwitchTime}
               onEnded={handleVideoEnded}
               onTimeUpdate={(time, dur) => {
+                currentPlayerTime.current = time;
                 const targetKey = activeSlug || video.slug || video.id;
                 updateWatchProgress(targetKey, time, dur, currentEpisode);
               }}
@@ -1172,15 +1184,18 @@ export const WatchView = ({
                   {episodeViewMode === 'list' && (
                     resolvedEpisodes.map((ep) => {
                       const isSelected = currentEpisode === ep.number;
+                      const isAvailable = ep.isAvailable;
                       return (
                         <div
                           key={ep.id || `ep-${ep.number}`}
                           ref={isSelected ? activeEpisodeRef : null}
-                          onClick={() => setCurrentEpisode(ep.number)}
-                          className={`flex gap-3 p-2 rounded-xl cursor-pointer transition-all ${
+                          onClick={() => isAvailable ? setCurrentEpisode(ep.number) : null}
+                          className={`flex gap-3 p-2 rounded-xl transition-all ${
                             isSelected
                               ? 'bg-[#272727] border border-[#444]'
-                              : 'bg-[#181818] border border-transparent hover:bg-[#222222]'
+                              : isAvailable
+                                ? 'bg-[#181818] border border-transparent hover:bg-[#222222] cursor-pointer'
+                                : 'bg-[#181818] border border-transparent opacity-40 cursor-not-allowed'
                           }`}
                         >
                           {/* Thumbnail */}
@@ -1188,10 +1203,16 @@ export const WatchView = ({
                             <FadeImage
                               src={ep.image || animeBannerOrFanart || video.thumbnail}
                               alt={ep.title || `Episode ${ep.number}`}
-                              className="w-full h-full object-cover"
+                              className={`w-full h-full object-cover ${!isAvailable ? 'grayscale opacity-50' : ''}`}
                               containerClassName="w-full h-full"
                               fallbackSrc={animeBannerOrFanart || video.thumbnail}
                             />
+                            
+                            {!isAvailable && (
+                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-white">Not Available</span>
+                              </div>
+                            )}
 
                             {/* Episode Number Pill */}
                             <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/80 text-white">
@@ -1249,20 +1270,25 @@ export const WatchView = ({
                     <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                       {resolvedEpisodes.map((ep) => {
                         const isSelected = currentEpisode === ep.number;
+                        const isAvailable = ep.isAvailable;
                         return (
                           <button
                             key={ep.id || `grid-${ep.number}`}
-                            onClick={() => setCurrentEpisode(ep.number)}
-                            className={`p-2.5 rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-0.5 border transition-all cursor-pointer ${
+                            onClick={() => isAvailable ? setCurrentEpisode(ep.number) : null}
+                            disabled={!isAvailable}
+                            className={`p-2.5 rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-0.5 border transition-all ${
                               isSelected
-                                ? 'bg-white text-black border-white shadow'
-                                : 'bg-[#1e1e1e] border-[#2c2c2c] hover:bg-[#282828] text-white'
+                                ? 'bg-white text-black border-white shadow cursor-pointer'
+                                : isAvailable 
+                                  ? 'bg-[#1e1e1e] border-[#2c2c2c] hover:bg-[#282828] text-white cursor-pointer'
+                                  : 'bg-[#181818] border-transparent opacity-30 text-gray-500 cursor-not-allowed'
                             }`}
-                            title={`Episode ${ep.number}${ep.title ? `: ${ep.title}` : ''}`}
+                            title={`Episode ${ep.number}${ep.title ? `: ${ep.title}` : ''}${!isAvailable ? ' (Not Available)' : ''}`}
                           >
                             <div className="flex items-center gap-1">
                               {isSelected && <Play className="w-2.5 h-2.5 fill-black text-black" />}
-                              <span className={`text-[10px] ${isSelected ? 'text-gray-700' : 'text-[#aaaaaa]'}`}>EP</span>
+                              {!isAvailable && <span className="text-[10px] text-gray-500 line-through">EP</span>}
+                              {isAvailable && <span className={`text-[10px] ${isSelected ? 'text-gray-700' : 'text-[#aaaaaa]'}`}>EP</span>}
                             </div>
                             <span className="text-sm font-black">{ep.number}</span>
                           </button>

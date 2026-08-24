@@ -22,6 +22,7 @@ interface VideoPlayerProps {
   intro?: SkipInterval;
   outro?: SkipInterval;
   sourceType?: 'mal' | 'slug';
+  initialTime?: number;
 }
 
 export const VideoPlayer = ({
@@ -42,6 +43,7 @@ export const VideoPlayer = ({
   intro,
   outro,
   sourceType = 'mal',
+  initialTime = 0,
 }: VideoPlayerProps) => {
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<Player | null>(null);
@@ -235,14 +237,11 @@ export const VideoPlayer = ({
         controlBar: {
           children: [
             'playToggle',
-            'volumePanel',
             'currentTimeDisplay',
             'timeDivider',
             'durationDisplay',
             'progressControl',
-            'playbackRateMenuButton',
             'subsCapsButton',
-            'pictureInPictureToggle',
             'fullscreenToggle',
           ],
         },
@@ -256,8 +255,78 @@ export const VideoPlayer = ({
       () => {
         setHasError(false);
         applySubtitles(player, subtitles);
+        
+        const tech = player.tech({ IWillNotUseThisInPlugins: true });
+        if (tech && tech.el()) {
+          const el = tech.el() as any;
+          el.preservesPitch = true;
+          el.mozPreservesPitch = true;
+          el.webkitPreservesPitch = true;
+
+          let holdTimer: any;
+          let lastTap = 0;
+
+          const handlePointerDown = (e: any) => {
+            const now = Date.now();
+            const rect = el.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+
+            if (now - lastTap < 300) {
+              clearTimeout(holdTimer);
+              const ct = player.currentTime() || 0;
+              if (x < rect.width / 2) {
+                 player.currentTime(Math.max(0, ct - 10));
+              } else {
+                 player.currentTime(ct + 10);
+              }
+              lastTap = 0;
+              return;
+            }
+
+            lastTap = now;
+            
+            holdTimer = setTimeout(() => {
+              player.playbackRate(2);
+            }, 500);
+          };
+
+          const handlePointerUp = () => {
+            clearTimeout(holdTimer);
+            if (player.playbackRate() > 1) {
+              player.playbackRate(1);
+            }
+          };
+
+          el.addEventListener('pointerdown', handlePointerDown);
+          el.addEventListener('pointerup', handlePointerUp);
+          el.addEventListener('pointercancel', handlePointerUp);
+        }
       }
     ));
+
+    player.on('loadedmetadata', () => {
+      if (initialTime > 0) {
+        player.currentTime(initialTime);
+      }
+      
+      // Force Highest Quality (VHS)
+      try {
+        const tech = player.tech({ IWillNotUseThisInPlugins: true }) as any;
+        if (tech && tech.vhs && tech.vhs.representations) {
+          const reps = tech.vhs.representations();
+          if (reps && reps.length > 0) {
+            // Sort by bandwidth descending
+            reps.sort((a: any, b: any) => (b.bandwidth || 0) - (a.bandwidth || 0));
+            // Disable lower qualities, enable only highest
+            reps.forEach((rep: any, index: number) => {
+              rep.enabled(index === 0);
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Could not force highest quality:', e);
+      }
+    });
 
     player.on('playing', () => {
       setIsPlaybackReady(true);
