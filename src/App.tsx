@@ -692,16 +692,6 @@ export default function App() {
             />
           )}
 
-          {/* AniTrail Anime Trailers Reels Experience */}
-          {activeView === 'anitrail' && (
-            <ReelsView
-              onSelectVideo={handleSelectVideo}
-              onBackToHome={handleHomeClick}
-              initialVideo={selectedReelVideo}
-              initialReelMode="anitrail"
-            />
-          )}
-
           {/* Popular & Trending Dedicated View */}
           {(activeView === 'popular' || activeView === 'trending') && (
             <AnimeCategoryView
@@ -1195,9 +1185,9 @@ export default function App() {
                                 <HomeReelsShelf
                                   shelfIndex={Math.floor(batchIdx / 2)}
                                   onSelectVideo={handleSelectVideo}
-                                  onOpenReelsView={(video, mode) => {
+                                  onOpenReelsView={(video) => {
                                     setSelectedReelVideo(video || null);
-                                    setActiveView(mode === 'anitrail' ? 'anitrail' : 'reels');
+                                    setActiveView('reels');
                                   }}
                                   fallbackVideos={apiVideos.length > 0 ? apiVideos : popularVideos}
                                 />

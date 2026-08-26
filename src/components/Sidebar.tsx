@@ -103,19 +103,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
-          onClick={() => handleItemClick('anitrail')}
-          className={`flex items-center gap-4 w-full px-3 py-2.5 rounded-xl font-normal transition-colors cursor-pointer ${
-            activeView === 'anitrail' ? 'bg-[#272727] font-semibold text-white' : 'text-gray-300 hover:bg-[#222222]'
-          }`}
-        >
-          <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
-          <div className="flex items-center justify-between flex-1 truncate">
-            <span className="truncate">AniTrail</span>
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-linear-to-r from-amber-600 to-yellow-500 text-white ml-2 shrink-0">TRAILERS</span>
-          </div>
-        </button>
-
-        <button
           onClick={() => handleItemClick('aninews')}
           className={`flex items-center gap-4 w-full px-3 py-2.5 rounded-xl font-normal transition-colors cursor-pointer ${
             activeView === 'aninews' || activeView === 'news' ? 'bg-[#272727] font-semibold text-white' : 'text-gray-300 hover:bg-[#222222]'

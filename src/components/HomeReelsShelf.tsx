@@ -17,7 +17,7 @@ import { FadeImage } from './FadeImage';
 
 interface HomeReelsShelfProps {
   onSelectVideo: (video: Video) => void;
-  onOpenReelsView: (startingVideo?: Video, mode?: 'anireels' | 'anitrail') => void;
+  onOpenReelsView: (startingVideo?: Video) => void;
   fallbackVideos?: Video[];
   shelfIndex?: number;
 }
@@ -28,9 +28,6 @@ export const HomeReelsShelf: React.FC<HomeReelsShelfProps> = ({
   fallbackVideos = [],
   shelfIndex = 0,
 }) => {
-  const [activeTab, setActiveTab] = useState<'anireels' | 'anitrail'>(
-    shelfIndex % 2 === 1 ? 'anitrail' : 'anireels'
-  );
   const [reels, setReels] = useState<Video[]>([]);
   const [loadedPages, setLoadedPages] = useState<number[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState<boolean>(true);
@@ -55,22 +52,15 @@ export const HomeReelsShelf: React.FC<HomeReelsShelfProps> = ({
     return available[Math.floor(Math.random() * available.length)];
   }, [totalCataloguePages]);
 
-  // Fetch 10 reels/trailers for a given page number
+  // Fetch 10 reels for a given page number
   const fetchPageItems = useCallback(async (page: number): Promise<Video[]> => {
     try {
-      if (activeTab === 'anitrail') {
-        const jikanRes = await fetchJikanAnimeTrailers(page, 10);
-        if (jikanRes && jikanRes.trailers.length > 0) {
-          return jikanRes.trailers;
-        }
-      } else {
-        const res = await fetchRecentAnime(page, 10);
-        if (res && res.videos && res.videos.length > 0) {
-          return res.videos;
-        }
+      const res = await fetchRecentAnime(page, 10);
+      if (res && res.videos && res.videos.length > 0) {
+        return res.videos;
       }
     } catch (err) {
-      console.warn(`Failed to load page ${page} items for ${activeTab}`, err);
+      console.warn(`Failed to load page ${page} items for AniReels`, err);
     }
 
     if (fallbackVideos.length > 0) {
@@ -79,28 +69,23 @@ export const HomeReelsShelf: React.FC<HomeReelsShelfProps> = ({
       return slice.length > 0 ? slice : fallbackVideos.slice(0, 10);
     }
     return [];
-  }, [activeTab, fallbackVideos]);
+  }, [fallbackVideos]);
 
-  // Initial load of items (varies initial page by shelfIndex so each shelf on vertical scroll has different content)
+  // Initial load of items
   const initItems = useCallback(async () => {
     setIsLoadingInitial(true);
     isFetchingRef.current = true;
     
-    let startPage = 1;
-    if (activeTab === 'anitrail') {
-      startPage = ((shelfIndex * 2) % 4) + 1;
-    } else {
-      const baseOffset = (shelfIndex * 5) % totalCataloguePages;
-      const excludes = Array.from({ length: baseOffset }, (_, i) => i + 1);
-      startPage = getRandomPage(excludes);
-    }
+    const baseOffset = (shelfIndex * 5) % totalCataloguePages;
+    const excludes = Array.from({ length: baseOffset }, (_, i) => i + 1);
+    const startPage = getRandomPage(excludes);
     
     const vids = await fetchPageItems(startPage);
     setReels(vids);
     setLoadedPages([startPage]);
     setIsLoadingInitial(false);
     isFetchingRef.current = false;
-  }, [activeTab, shelfIndex, getRandomPage, fetchPageItems]);
+  }, [shelfIndex, getRandomPage, fetchPageItems]);
 
   useEffect(() => {
     initItems();
@@ -164,42 +149,19 @@ export const HomeReelsShelf: React.FC<HomeReelsShelfProps> = ({
 
   return (
     <section className="relative py-4 border-t border-[#222222]/80 group/shelf">
-      {/* Header matching standard completed sliders with AniReels / AniTrail tab switcher */}
+      {/* Header for AniReels */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 px-1">
         <div className="flex items-center gap-3 min-w-0">
           <div className="shrink-0 flex items-center justify-center text-pink-500">
-            {activeTab === 'anitrail' ? (
-              <Sparkles className="w-5 h-5 text-amber-400" />
-            ) : (
-              <Film className="w-5 h-5 text-pink-500" />
-            )}
+            <Film className="w-5 h-5 text-pink-500" />
           </div>
           
-          {/* Tab Switcher Pills */}
-          <div className="flex items-center bg-[#181818] p-1 rounded-full border border-white/10 shadow-sm">
-            <button
-              onClick={() => setActiveTab('anireels')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'anireels'
-                  ? 'bg-pink-600 text-white shadow-md'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5" />
-              <span>AniReels Shorts</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('anitrail')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'anitrail'
-                  ? 'bg-amber-600 text-white shadow-md'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>AniTrail Trailers</span>
-            </button>
-          </div>
+          <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+            <span>AniReels Shorts</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-600/30 text-pink-300 border border-pink-500/30">
+              SHORTS
+            </span>
+          </h2>
         </div>
 
         {/* Right Action Controls: Chevrons, Reshuffle & Fullscreen Player */}
@@ -209,18 +171,16 @@ export const HomeReelsShelf: React.FC<HomeReelsShelfProps> = ({
             className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-[#1e1e1e] hover:bg-[#2a2a2a] border border-white/10 text-gray-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
             title="Shuffle Random Page Items"
           >
-            <Shuffle className={`w-3.5 h-3.5 ${activeTab === 'anitrail' ? 'text-amber-400' : 'text-pink-400'}`} />
+            <Shuffle className="w-3.5 h-3.5 text-pink-400" />
             <span className="hidden sm:inline">Shuffle</span>
           </button>
 
           <button
             onClick={() => {
               const startVid = reels[0] || fallbackVideos[0];
-              onOpenReelsView(startVid, activeTab);
+              onOpenReelsView(startVid);
             }}
-            className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
-              activeTab === 'anitrail' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-pink-600 hover:bg-pink-500'
-            }`}
+            className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md bg-pink-600 hover:bg-pink-500"
             title="Open Fullscreen Feed"
           >
             <Maximize2 className="w-3.5 h-3.5" />

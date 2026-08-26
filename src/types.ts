@@ -217,7 +217,6 @@ export type ViewMode =
   | 'completed'
   | 'genre'
   | 'aninews'
-  | 'anitrail'
   | 'news'
   | 'subscriptions'
   | 'library'

@@ -21,7 +21,9 @@ import {
   Check,
   Zap,
   Subtitles,
-  ExternalLink
+  ExternalLink,
+  RotateCcw,
+  Clock
 } from 'lucide-react';
 import videojs from 'video.js';
 import type Player from 'video.js/dist/types/player';
@@ -42,7 +44,7 @@ interface ReelsViewProps {
   onSelectVideo: (video: Video) => void;
   onBackToHome: () => void;
   initialVideo?: Video | null;
-  initialReelMode?: 'anireels' | 'anitrail';
+  initialReelMode?: 'anireels';
 }
 
 // Fisher-Yates shuffle algorithm for true randomized anime reels
@@ -58,12 +60,9 @@ function shuffleArray<T>(array: T[]): T[] {
 export const ReelsView: React.FC<ReelsViewProps> = ({ 
   onSelectVideo, 
   onBackToHome, 
-  initialVideo, 
-  initialReelMode 
+  initialVideo
 }) => {
-  const [reelMode, setReelMode] = useState<'anireels' | 'anitrail'>(
-    initialReelMode || (initialVideo?.isTrailer ? 'anitrail' : 'anireels')
-  );
+  const reelMode = 'anireels';
   const [reels, setReels] = useState<Video[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isLoadingFeed, setIsLoadingFeed] = useState<boolean>(true);
@@ -84,6 +83,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const [isBuffering, setIsBuffering] = useState<boolean>(false);
   const [isVideoReady, setIsVideoReady] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
+
+  // 30-Second Midpoint Clip & Internet Data Saving States
+  const [isClipEnded, setIsClipEnded] = useState<boolean>(false);
+  const [shownBlurMap, setShownBlurMap] = useState<{ [key: string]: boolean }>({});
+  const hasSeekedToMiddleRef = useRef<boolean>(false);
+  const clipStartTimeRef = useRef<number>(0);
+  const clipEndTimeRef = useRef<number>(0);
+
+  const formatTime = (seconds: number): string => {
+    if (!seconds || isNaN(seconds)) return '12:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   // Realtime drag & swipe physics state (TikTok / Instagram mobile experience)
   const [dragOffsetY, setDragOffsetY] = useState<number>(0);
@@ -117,7 +130,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }, 2500);
   };
 
-  // 1. Initial Load: Fetch Recent & Popular Anime or Jikan Trailers depending on reelMode
+  // 1. Initial Load: Fetch Recent & Popular Anime
   const loadReelsFeed = useCallback(async () => {
     setIsLoadingFeed(true);
     setFeedError(null);
@@ -128,31 +141,25 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     try {
       let uniqueVideos: Video[] = [];
 
-      if (reelMode === 'anitrail') {
-        // Fetch Jikan / AniList official anime trailers
-        const jikanRes = await fetchJikanAnimeTrailers(1, 15);
-        uniqueVideos = jikanRes.trailers;
-      } else {
-        // Fetch both recent episodes and popular anime from API
-        const [recentRes, popVideos] = await Promise.all([
-          fetchRecentAnime(1, 24).catch(() => ({ videos: [] })),
-          fetchPopularAnime().catch(() => [])
-        ]);
+      // Fetch both recent episodes and popular anime from API
+      const [recentRes, popVideos] = await Promise.all([
+        fetchRecentAnime(1, 24).catch(() => ({ videos: [] })),
+        fetchPopularAnime().catch(() => [])
+      ]);
 
-        const combined = [...recentRes.videos, ...popVideos];
-        
-        // Deduplicate by slug or ID
-        const seen = new Set<string>();
-        uniqueVideos = combined.filter(v => {
-          const key = v.slug || v.id || v.title;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-      }
+      const combined = [...recentRes.videos, ...popVideos];
+      
+      // Deduplicate by slug or ID
+      const seen = new Set<string>();
+      uniqueVideos = combined.filter(v => {
+        const key = v.slug || v.id || v.title;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
       if (uniqueVideos.length === 0) {
-        throw new Error(`No ${reelMode === 'anitrail' ? 'AniTrail trailers' : 'AniReels shorts'} available at the moment.`);
+        throw new Error('No AniReels shorts available at the moment.');
       }
 
       // Apply Randomized Fisher-Yates Algorithm
@@ -186,7 +193,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     } finally {
       setIsLoadingFeed(false);
     }
-  }, [reelMode, initialVideo]);
+  }, [initialVideo]);
 
   // Lazy loading pagination engine
   const loadMoreReels = useCallback(async (nextPage: number) => {
@@ -196,19 +203,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
     try {
       let newItems: Video[] = [];
-      if (reelMode === 'anitrail') {
-        const res = await fetchJikanAnimeTrailers(nextPage, 12);
-        newItems = res.trailers;
-        if (!res.hasNextPage && newItems.length === 0) {
-          setHasMore(false);
-        }
+      const res = await fetchRecentAnime(nextPage, 20);
+      if (res && res.videos && res.videos.length > 0) {
+        newItems = res.videos;
       } else {
-        const res = await fetchRecentAnime(nextPage, 20);
-        if (res && res.videos && res.videos.length > 0) {
-          newItems = res.videos;
-        } else {
-          setHasMore(false);
-        }
+        setHasMore(false);
       }
 
       if (newItems.length > 0) {
@@ -286,7 +285,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const anime = reels[index];
 
     // If item is a trailer, skip HLS API prefetch
-    if (anime.isTrailer || anime.youtubeId || reelMode === 'anitrail') {
+    if (anime.isTrailer || anime.youtubeId) {
       return null;
     }
 
@@ -344,14 +343,66 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   // 3. Video.js Player Setup & Stream Synchronization
   const currentAnime = reels[currentIndex];
 
+  const handleSeekToMidpoint = useCallback(() => {
+    if (!playerRef.current || hasSeekedToMiddleRef.current || reelMode !== 'anireels') return;
+    const player = playerRef.current;
+    const dur = player.duration() || 0;
+
+    // Calculate midpoint of episode (e.g. 24 min episode = 1440s -> 720s midpoint)
+    const midPoint = dur > 60 ? Math.floor(dur / 2) : 720;
+    clipStartTimeRef.current = midPoint;
+    clipEndTimeRef.current = midPoint + 30;
+    hasSeekedToMiddleRef.current = true;
+
+    try {
+      player.currentTime(midPoint);
+    } catch (err) {
+      console.warn('Seek to middle failed:', err);
+    }
+  }, [reelMode]);
+
+  const handleReplayClip = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsClipEnded(false);
+    hasSeekedToMiddleRef.current = false;
+
+    if (!currentAnime || !playerRef.current) return;
+    const player = playerRef.current;
+    const key = currentAnime.slug || currentAnime.id;
+    const streamData = streamCacheRef.current.get(key);
+
+    if (streamData && streamData.streamUrl) {
+      player.src({
+        src: streamData.streamUrl,
+        type: 'application/x-mpegURL',
+      });
+      player.muted(isMuted);
+      player.volume(volume);
+
+      const startSec = clipStartTimeRef.current || 720;
+      clipEndTimeRef.current = startSec + 30;
+      hasSeekedToMiddleRef.current = true;
+
+      player.currentTime(startSec);
+      player.play().then(() => {
+        setIsPlaying(true);
+        setIsVideoReady(true);
+      }).catch(console.warn);
+    }
+  };
+
   useEffect(() => {
     if (!currentAnime) return;
 
     let isCancelled = false;
     setCurrentTime(0);
+    setIsClipEnded(false);
+    hasSeekedToMiddleRef.current = false;
+    clipStartTimeRef.current = 0;
+    clipEndTimeRef.current = 0;
 
-    // If active item is a trailer / YouTube video or in AniTrail mode, skip Video.js setup
-    if (currentAnime.isTrailer || currentAnime.youtubeId || reelMode === 'anitrail') {
+    // If active item is a trailer / YouTube video, skip Video.js setup
+    if (currentAnime.isTrailer || currentAnime.youtubeId) {
       if (playerRef.current) {
         try {
           playerRef.current.pause();
@@ -414,13 +465,37 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           },
         });
 
+        playerRef.current.on('loadedmetadata', handleSeekToMidpoint);
+
         playerRef.current.on('timeupdate', () => {
           if (playerRef.current) {
             const cur = playerRef.current.currentTime() || 0;
+            const dur = playerRef.current.duration() || 0;
             setCurrentTime(cur);
-            setDuration(playerRef.current.duration() || 0);
+            setDuration(dur);
             if (cur > 0.1) {
               setIsVideoReady(true);
+            }
+
+            if (reelMode === 'anireels') {
+              if (!hasSeekedToMiddleRef.current && dur > 0) {
+                handleSeekToMidpoint();
+              }
+
+              // 30-Second Clip End Limit check: record shown blur state and auto-repeat
+              if (clipEndTimeRef.current > 0 && cur >= clipEndTimeRef.current) {
+                const key = currentAnime ? (currentAnime.slug || currentAnime.id) : '';
+                if (key) {
+                  setShownBlurMap(prev => ({ ...prev, [key]: true }));
+                }
+                const startTime = clipStartTimeRef.current > 0 ? clipStartTimeRef.current : 0;
+                try {
+                  playerRef.current.currentTime(startTime);
+                  playerRef.current.play().catch(() => {});
+                } catch (_) {}
+                setIsPlaying(true);
+                setIsClipEnded(false);
+              }
             }
           }
         });
@@ -433,8 +508,23 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         });
         playerRef.current.on('pause', () => setIsPlaying(false));
         playerRef.current.on('ended', () => {
-          // Auto-advance to next reel on video completion
-          handleNextReel();
+          if (reelMode === 'anireels') {
+            const key = currentAnime ? (currentAnime.slug || currentAnime.id) : '';
+            if (key) {
+              setShownBlurMap(prev => ({ ...prev, [key]: true }));
+            }
+            if (playerRef.current) {
+              const startTime = clipStartTimeRef.current > 0 ? clipStartTimeRef.current : 0;
+              try {
+                playerRef.current.currentTime(startTime);
+                playerRef.current.play().catch(() => {});
+              } catch (_) {}
+              setIsPlaying(true);
+              setIsClipEnded(false);
+            }
+          } else {
+            handleNextReel();
+          }
         });
         playerRef.current.on('error', () => {
           setIsBuffering(false);
@@ -444,15 +534,26 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
       }
 
       const player = playerRef.current;
+      try {
+        player.pause();
+      } catch (e) {
+        // Ignore
+      }
+
       player.src({
         src: streamUrl,
         type: 'application/x-mpegURL',
       });
+      player.load();
 
       player.muted(isMuted);
       player.volume(volume);
 
-      player.play().catch(() => {
+      player.play().then(() => {
+        setIsPlaying(true);
+        setIsVideoReady(true);
+        handleSeekToMidpoint();
+      }).catch(() => {
         // Autoplay may need user interaction if unmuted
         setIsPlaying(false);
       });
@@ -464,7 +565,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [currentIndex, currentAnime, prefetchStreamForIndex]);
+  }, [currentIndex, currentAnime, prefetchStreamForIndex, handleSeekToMidpoint, reelMode]);
 
   // Clean up player on unmount
   useEffect(() => {
@@ -492,6 +593,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   };
 
+  const [tapAnim, setTapAnim] = useState<{ type: 'play' | 'pause'; key: number } | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+
   // Re-randomize algorithm
   const handleShuffleReels = () => {
     if (reels.length === 0) return;
@@ -501,15 +605,36 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     showToast('AniReels queue shuffled with random anime!');
   };
 
-  // Play / Pause toggle on click (suppressed if dragged)
+  // Play / Pause toggle on click or tap gesture
   const togglePlayPause = () => {
     if (hasMovedSignificantly.current) return;
-    if (!playerRef.current) return;
-    if (isPlaying) {
-      playerRef.current.pause();
-    } else {
-      playerRef.current.play().catch(console.warn);
+    const now = Date.now();
+    if (now - lastTapTimeRef.current < 200) return; // lower threshold for snappier feedback
+    lastTapTimeRef.current = now;
+
+    if (isClipEnded) {
+      handleReplayClip();
+      return;
     }
+    if (!playerRef.current) return;
+
+    const newKey = now;
+    if (isPlaying) {
+      try {
+        playerRef.current.pause();
+      } catch (_) {}
+      setIsPlaying(false);
+      setTapAnim({ type: 'pause', key: newKey });
+    } else {
+      playerRef.current.play().then(() => {
+        setIsPlaying(true);
+        setTapAnim({ type: 'play', key: newKey });
+      }).catch(console.warn);
+    }
+
+    setTimeout(() => {
+      setTapAnim(prev => prev?.key === newKey ? null : prev);
+    }, 750);
   };
 
   // Mute / Unmute toggle
@@ -637,6 +762,12 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     const velocity = deltaY / elapsed; // px per ms
     const containerHeight = containerRef.current?.clientHeight || 650;
 
+    // Tap gesture check: if user tapped without dragging significantly
+    if (!hasMovedSignificantly.current && Math.abs(deltaY) < 12) {
+      togglePlayPause();
+      return;
+    }
+
     // Fast flick velocity or distance threshold (> 70px)
     const isSwipedUp = (deltaY < -70 || velocity < -0.4) && currentIndex < reels.length - 1;
     const isSwipedDown = (deltaY > 70 || velocity > 0.4) && currentIndex > 0;
@@ -699,7 +830,24 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
   const activeKey = currentAnime ? (currentAnime.slug || currentAnime.id) : '';
   const isCurrentPrefetched = prefetchStatus[activeKey];
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const hasShownBlurForCurrent = activeKey ? !!shownBlurMap[activeKey] : false;
+
+  const clipElapsed = Math.max(0, currentTime - (clipStartTimeRef.current || 720));
+  const clipProgressPercent = Math.min(100, Math.max(0, (clipElapsed / 30) * 100));
+  const progressPercent = (reelMode === 'anireels' && clipStartTimeRef.current > 0)
+    ? clipProgressPercent
+    : (duration > 0 ? (currentTime / duration) * 100 : 0);
+
+  // Fade in blur overlay 2 seconds before clip ends ONCE per reel (never during swipe/drag)
+  const isNearClipEnd = reelMode === 'anireels' &&
+    isVideoReady &&
+    !hasShownBlurForCurrent &&
+    !isTransitioning &&
+    !isDragging &&
+    (
+      isClipEnded ||
+      (clipEndTimeRef.current > 0 && currentTime >= clipEndTimeRef.current - 2)
+    );
 
   const prevAnime = currentIndex > 0 ? reels[currentIndex - 1] : null;
   const nextAnime = currentIndex < reels.length - 1 ? reels[currentIndex + 1] : null;
@@ -724,39 +872,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          {/* Mode Switcher Pills: AniReels Shorts vs AniTrail Trailers */}
-          <div className="flex items-center bg-[#181818] p-1 rounded-full border border-white/10 shadow-lg">
-            <button
-              onClick={() => {
-                if (reelMode !== 'anireels') {
-                  setReelMode('anireels');
-                }
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                reelMode === 'anireels'
-                  ? 'bg-pink-600 text-white shadow-md'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5" />
-              <span>AniReels</span>
-            </button>
-            <button
-              onClick={() => {
-                if (reelMode !== 'anitrail') {
-                  setReelMode('anitrail');
-                }
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                reelMode === 'anitrail'
-                  ? 'bg-amber-600 text-white shadow-md'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>AniTrail</span>
-              <span className="px-1 py-0.2 rounded text-[8px] bg-amber-950 text-amber-300 border border-amber-700/50">MAL</span>
-            </button>
+          {/* Title Header */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#181818] border border-white/10 shadow-lg text-xs font-bold text-white">
+            <Film className="w-3.5 h-3.5 text-pink-500" />
+            <span>AniReels</span>
           </div>
         </div>
 
@@ -771,7 +890,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#202020] hover:bg-[#2c2c2c] text-xs text-gray-200 hover:text-white border border-white/10 transition-all cursor-pointer shadow-sm active:scale-95"
             title="Shuffle and randomize queue"
           >
-            <Shuffle className={`w-3.5 h-3.5 ${reelMode === 'anitrail' ? 'text-amber-400' : 'text-pink-400'}`} />
+            <Shuffle className="w-3.5 h-3.5 text-pink-400" />
             <span className="hidden sm:inline">Shuffle</span>
           </button>
         </div>
@@ -898,9 +1017,20 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
 
               {/* Play / Pause Center Overlay Indicator */}
               {!isPlaying && !isBuffering && isVideoReady && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/35 z-30 transition-all pointer-events-none">
-                  <div className="w-16 h-16 rounded-full bg-black/70 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-2xl transform scale-110">
-                    <Play className="w-8 h-8 ml-1 fill-current text-white" />
+                <div className="absolute inset-0 flex items-center justify-center z-30 transition-all pointer-events-none">
+                  <Play className="w-12 h-12 text-white fill-current drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
+                </div>
+              )}
+
+              {/* Tap Pause / Play Center Pulse Feedback */}
+              {tapAnim && (
+                <div className="absolute inset-0 flex items-center justify-center z-45 pointer-events-none">
+                  <div key={tapAnim.key} className="animate-tap-feedback flex items-center justify-center">
+                    {tapAnim.type === 'pause' ? (
+                      <Pause className="w-12 h-12 text-white fill-current drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
+                    ) : (
+                      <Play className="w-12 h-12 text-white fill-current drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
+                    )}
                   </div>
                 </div>
               )}
@@ -944,126 +1074,86 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Top Reel Badges (Prefetched indicator & Sound Toggle) */}
-            <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
-              <div className="flex items-center gap-2">
-                {isCurrentPrefetched && (
-                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[10px] font-bold text-emerald-400 shadow-md">
-                    <Zap className="w-3 h-3 fill-current text-emerald-400" />
-                    <span>PREFETCHED</span>
+              {/* 30-Second Midpoint Clip Finished / 2-Second Fade-In Blur Overlay */}
+              {reelMode === 'anireels' && (
+                <div
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUpOrCancel}
+                  onPointerCancel={handlePointerUpOrCancel}
+                  className={`absolute inset-0 z-40 bg-black/85 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center space-y-3 transition-opacity duration-700 ease-in-out ${
+                    isNearClipEnd ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                  }`}
+                >
+                  {/* Ambient Blurred Background Poster */}
+                  <div className="absolute inset-0 overflow-hidden opacity-40 pointer-events-none">
+                    <FadeImage
+                      src={currentAnime.poster || currentAnime.thumbnail}
+                      alt={currentAnime.title}
+                      className="w-full h-full object-cover filter blur-3xl scale-125"
+                      containerClassName="w-full h-full"
+                    />
+                    <div className="absolute inset-0 bg-black/60" />
                   </div>
-                )}
-                <div className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[10px] font-semibold text-gray-300 shadow-md">
-                  EP {currentAnime.episodeNumber || 1}
+
+                  <div className="relative z-10 flex flex-col items-center max-w-xs space-y-4">
+                    {/* Poster Image */}
+                    <div className="w-28 h-40 rounded-2xl overflow-hidden border border-white/20 shadow-2xl shrink-0 group hover:scale-105 transition-all">
+                      <FadeImage
+                        src={currentAnime.poster || currentAnime.thumbnail}
+                        alt={currentAnime.title}
+                        className="w-full h-full object-cover"
+                        containerClassName="w-full h-full"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      {/* Anime Title */}
+                      <h3 className="text-base sm:text-lg font-extrabold text-white line-clamp-2 leading-snug drop-shadow-md">
+                        {currentAnime.title}
+                      </h3>
+                      
+                      {/* Episode Info */}
+                      <p className="text-xs text-pink-400 font-extrabold tracking-wide uppercase">
+                        Episode {currentAnime.episodeNumber || 1}
+                      </p>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="mt-4 flex flex-col items-center gap-2 w-full">
+                      <button
+                        onClick={handleWatchFullAnime}
+                        className="w-full py-3 px-5 rounded-xl bg-linear-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-xl transition-all cursor-pointer active:scale-95"
+                      >
+                        <Tv className="w-4 h-4" />
+                        <span>Watch Now</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              )}
+            </div>
+
+            {/* Top Controls (Mute Toggle) - Hidden when near clip end */}
+            {!isNearClipEnd && (
+              <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-end pointer-events-none transition-opacity duration-300">
+                <button
+                  onClick={toggleMute}
+                  className="p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white transition-all pointer-events-auto cursor-pointer shadow-lg active:scale-90"
+                  title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+                >
+                  {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-white" />}
+                </button>
               </div>
+            )}
 
-              <button
-                onClick={toggleMute}
-                className="p-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white transition-all pointer-events-auto cursor-pointer shadow-lg active:scale-90"
-                title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
-              >
-                {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-white" />}
-              </button>
-            </div>
-
-            {/* Right Floating Action Toolbar */}
-            <div className="absolute right-3 bottom-16 z-30 flex flex-col items-center gap-3.5 pointer-events-auto">
-              {/* Like Action */}
-              <button
-                onClick={handleLike}
-                className="flex flex-col items-center gap-1 text-white group/btn cursor-pointer"
-              >
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md border transition-all duration-200 shadow-xl ${
-                  likedMap[activeKey]
-                    ? 'bg-pink-600 border-pink-400 text-white scale-105'
-                    : 'bg-black/60 border-white/15 text-white hover:bg-black/80'
-                }`}>
-                  <Heart className={`w-5 h-5 ${likedMap[activeKey] ? 'fill-current text-white' : 'text-white'}`} />
-                </div>
-                <span className="text-[11px] font-bold tracking-tight text-white drop-shadow-md">
-                  {likeCounts[activeKey] || 0}
-                </span>
-              </button>
-
-              {/* Watch Later / Save Action */}
-              <button
-                onClick={handleToggleSave}
-                className="flex flex-col items-center gap-1 text-white group/btn cursor-pointer"
-                title="Save to Watch Later"
-              >
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md border transition-all duration-200 shadow-xl ${
-                  savedMap[activeKey]
-                    ? 'bg-blue-600 border-blue-400 text-white scale-105'
-                    : 'bg-black/60 border-white/15 text-white hover:bg-black/80'
-                }`}>
-                  <Bookmark className={`w-5 h-5 ${savedMap[activeKey] ? 'fill-current text-white' : 'text-white'}`} />
-                </div>
-                <span className="text-[10px] font-medium text-gray-300 drop-shadow-md">
-                  {savedMap[activeKey] ? 'Saved' : 'Save'}
-                </span>
-              </button>
-
-              {/* Watch Full Anime Button */}
-              <button
-                onClick={handleWatchFullAnime}
-                className="flex flex-col items-center gap-1 text-white group/btn cursor-pointer"
-                title="Watch full episodes in player"
-              >
-                <div className="w-11 h-11 rounded-full bg-linear-to-tr from-red-600 to-orange-500 border border-white/25 flex items-center justify-center text-white shadow-xl hover:scale-105 transition-all">
-                  <Tv className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-bold text-white drop-shadow-md">
-                  Full
-                </span>
-              </button>
-
-              {/* Info Drawer Toggle */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowInfoModal(!showInfoModal);
-                }}
-                className="flex flex-col items-center gap-1 text-white group/btn cursor-pointer"
-                title="Anime details"
-              >
-                <div className="w-11 h-11 rounded-full bg-black/60 hover:bg-black/80 border border-white/15 backdrop-blur-md flex items-center justify-center text-white shadow-xl transition-all">
-                  <Info className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-medium text-gray-300 drop-shadow-md">
-                  Info
-                </span>
-              </button>
-
-              {/* Share Action */}
-              <button
-                onClick={handleShare}
-                className="flex flex-col items-center gap-1 text-white group/btn cursor-pointer"
-                title="Share Reel"
-              >
-                <div className="w-11 h-11 rounded-full bg-black/60 hover:bg-black/80 border border-white/15 backdrop-blur-md flex items-center justify-center text-white shadow-xl transition-all">
-                  <Share2 className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-medium text-gray-300 drop-shadow-md">
-                  Share
-                </span>
-              </button>
-            </div>
-
-            {/* Bottom Info Overlay (Visible for AniReels shorts only; hidden for pure AniTrail player view) */}
-            {reelMode !== 'anitrail' && !currentAnime.isTrailer && (
-              <div className="absolute left-0 right-16 bottom-0 p-4 z-30 bg-linear-to-t from-black via-black/80 to-transparent pointer-events-none space-y-1.5">
+            {/* Bottom Info Overlay - Hidden when near clip end */}
+            {!currentAnime.isTrailer && !isNearClipEnd && (
+              <div className="absolute left-0 right-4 bottom-0 p-4 z-30 bg-linear-to-t from-black via-black/80 to-transparent pointer-events-none space-y-1.5 transition-opacity duration-300">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] px-2.5 py-0.5 rounded-full font-extrabold uppercase tracking-wider bg-pink-600 text-white shadow-md">
                     EP {currentAnime.episodeNumber || 1}
                   </span>
-                  {currentAnime.score && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/70 border border-amber-500/30 text-amber-300 font-bold">
-                      ⭐ {currentAnime.score} MAL
-                    </span>
-                  )}
                 </div>
 
                 {/* Anime Title */}
@@ -1075,9 +1165,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 <div className="pt-0.5 pointer-events-auto">
                   <button
                     onClick={handleWatchFullAnime}
-                    className="text-xs px-3.5 py-1.5 rounded-full font-extrabold transition-all shadow-lg cursor-pointer bg-white hover:bg-gray-200 text-black"
+                    className="text-xs px-3.5 py-1.5 rounded-full font-extrabold transition-all shadow-lg cursor-pointer bg-white hover:bg-gray-200 text-black flex items-center gap-1.5"
                   >
-                    Watch Anime →
+                    <Tv className="w-3.5 h-3.5" />
+                    <span>Watch Full</span>
                   </button>
                 </div>
               </div>
