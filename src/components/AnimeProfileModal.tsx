@@ -20,6 +20,7 @@ export const AnimeProfileModal: React.FC<AnimeProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'details' | 'episodes' | 'related'>('details');
   const [animeInfo, setAnimeInfo] = useState<AnimeInfoData | null>(null);
   const [episodesList, setEpisodesList] = useState<AnimeEpisodeDetail[]>([]);
+  const [episodeBanner, setEpisodeBanner] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
@@ -27,6 +28,7 @@ export const AnimeProfileModal: React.FC<AnimeProfileModalProps> = ({
     if (!isOpen || !video) {
       setAnimeInfo(null);
       setEpisodesList([]);
+      setEpisodeBanner(null);
       return;
     }
 
@@ -45,8 +47,13 @@ export const AnimeProfileModal: React.FC<AnimeProfileModalProps> = ({
         const targetId = info?.anilistId || info?.malId || video.aniId || video.malId || video.slug;
         if (targetId) {
           const meta = await fetchAnimeEpisodesMetadata(targetId);
-          if (isMounted && meta && meta.episodes.length > 0) {
-            setEpisodesList(meta.episodes);
+          if (isMounted && meta) {
+            if (meta.banner) {
+              setEpisodeBanner(meta.banner);
+            }
+            if (meta.episodes.length > 0) {
+              setEpisodesList(meta.episodes);
+            }
           } else if (info && Array.isArray(info.episodes) && info.episodes.length > 0) {
             // fallback to info episodes array
             const fallbackEps: AnimeEpisodeDetail[] = info.episodes.map((ep: any, idx: number) => ({
@@ -73,7 +80,7 @@ export const AnimeProfileModal: React.FC<AnimeProfileModalProps> = ({
 
   if (!isOpen || !video) return null;
 
-  const bannerImg = animeInfo?.banner || animeInfo?.background_image || video.banner || video.thumbnail;
+  const bannerImg = episodeBanner || animeInfo?.banner || animeInfo?.background_image || video.banner || video.thumbnail;
   const avatarImg = animeInfo?.poster || video.channel.avatar || video.thumbnail;
   const studioName = animeInfo?.studios?.[0] || video.channel.name;
   const descriptionText = animeInfo?.description || video.description;

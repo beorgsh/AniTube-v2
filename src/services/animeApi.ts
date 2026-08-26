@@ -1089,6 +1089,7 @@ export async function fetchAnimeEpisodesMetadata(
   images: any[];
   title?: string;
   totalEpisodes?: number;
+  banner?: string;
 }> {
   const params = new URLSearchParams();
   if (season !== undefined) params.set('season', String(season));
@@ -1118,11 +1119,20 @@ export async function fetchAnimeEpisodesMetadata(
           }))
         : [];
 
+      const discoveredBanner =
+        data.data.banner ||
+        data.data.bannerImage ||
+        data.data.cover ||
+        data.data.coverImage ||
+        data.data.headerImage ||
+        (Array.isArray(data.data.images) && data.data.images[0]?.url ? data.data.images[0].url : typeof data.data.images?.[0] === 'string' ? data.data.images[0] : epList[0]?.image);
+
       return {
         episodes: epList,
         images: data.data.images || [],
         title: data.data.title || data.data.titleRomaji,
         totalEpisodes: data.data.totalEpisodes || epList.length,
+        banner: discoveredBanner,
       };
     }
   } catch (err) {

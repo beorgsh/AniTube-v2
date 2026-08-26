@@ -990,16 +990,18 @@ export default function App() {
                 )}
 
                 {/* Loading Skeletons for Initial Load, Search, or Genre Switch */}
-                {isInitialLoading || isSearching ? (
+                {isInitialLoading ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
                     {Array.from({ length: 8 }).map((_, i) => (
                       <VideoCardSkeleton
                         key={`skeleton-${i}`}
-                        label={searchQuery ? `Searching "${searchQuery}"...` : 'Loading AniTube...'}
+                        label="Loading AniTube..."
                         delayMs={i * 60}
                       />
                     ))}
                   </div>
+                ) : isSearching ? (
+                  <GenreListSkeleton />
                 ) : isGenreLoading && selectedCategory !== 'All' ? (
                   <GenreListSkeleton />
                 ) : isGenreLoading ? (
@@ -1035,7 +1037,7 @@ export default function App() {
                   <>
                     {/* Search or Specific Genre */}
                     {searchQuery ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+                      <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
                         {searchResults.map((video) => (
                           <VideoCard
                             key={video.id}
@@ -1045,13 +1047,14 @@ export default function App() {
                               setProfileVideo(v);
                               setIsProfileModalOpen(true);
                             }}
-                            isGenreCard={false}
+                            layout="list"
+                            isGenreCard={true}
                             isGenreBlurOverlay={isGenreBlurOverlay}
                           />
                         ))}
                       </div>
                     ) : selectedCategory !== 'All' ? (
-                      <div className="max-w-4xl mx-auto space-y-3">
+                      <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
                         {filteredVideos.map((video) => (
                           <VideoCard
                             key={video.id}
