@@ -8,6 +8,9 @@ import { GenreListSkeleton } from './components/GenreListSkeleton';
 import { WatchView } from './components/WatchView';
 import { AnimeHorizontalSlider } from './components/AnimeHorizontalSlider';
 import { AnimeCategoryView } from './components/AnimeCategoryView';
+import { ReelsView } from './components/ReelsView';
+import { HomeReelsShelf } from './components/HomeReelsShelf';
+import { AniNewsView } from './components/AniNewsView';
 import { SavedListView } from './components/SavedListView';
 import { WatchHistoryView } from './components/WatchHistoryView';
 import { LandingPage } from './components/LandingPage';
@@ -40,6 +43,7 @@ import {
   LikedEpisodeItem 
 } from './services/sessionStorage';
 import { History, Tv, RefreshCw, Loader2, Sparkles, AlertCircle, Clock, ThumbsUp, ChevronRight, Shuffle } from 'lucide-react';
+import { cleanAnimeTitleForSearch, filterAndRankSearchResults } from './utils/searchFilter';
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewMode>('home');
@@ -100,6 +104,9 @@ export default function App() {
   // Anime Profile Modal State
   const [profileVideo, setProfileVideo] = useState<Video | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+
+  // Selected Reel Video State for AniReels
+  const [selectedReelVideo, setSelectedReelVideo] = useState<Video | null>(null);
 
   // Genre Portrait Blur Overlay Setting State
   const [isGenreBlurOverlay, setIsGenreBlurOverlay] = useState<boolean>(() => {
@@ -281,10 +288,22 @@ export default function App() {
     }
   }, [selectedCategory, genrePagination, isLoadingMoreGenre]);
 
-  // Perform search
+  // Combined video list (custom user streams + API recent anime, or fallback to mock catalogue)
+  const allVideos = useMemo(() => {
+    if (apiVideos.length > 0) {
+      return [...customVideos, ...apiVideos];
+    }
+    if (popularVideos.length > 0) {
+      return [...customVideos, ...popularVideos];
+    }
+    return [...customVideos, ...MOCK_VIDEOS];
+  }, [customVideos, apiVideos, popularVideos]);
+
+  // Perform search with Automatic Connected Filter & Multi-Source Ranking
   useEffect(() => {
     const performSearch = async () => {
-      if (!searchQuery || searchQuery.trim().length === 0) {
+      const trimmedQuery = searchQuery ? searchQuery.trim() : '';
+      if (!trimmedQuery) {
         setSearchResults([]);
         setSearchError(null);
         return;
@@ -293,9 +312,40 @@ export default function App() {
       setIsSearching(true);
       setSearchError(null);
       try {
+        const cleanQuery = cleanAnimeTitleForSearch(trimmedQuery) || trimmedQuery;
         const { fetchAnimeSearch } = await import('./services/animeApi');
-        const results = await fetchAnimeSearch(searchQuery);
-        setSearchResults(results.videos);
+        const results = await fetchAnimeSearch(cleanQuery);
+        
+        // Also match from existing loaded library/categories as instant candidates
+        const localCandidates = allVideos.filter(v => v && v.title);
+        const localFiltered = filterAndRankSearchResults<Video>(
+          cleanQuery,
+          localCandidates,
+          (v) => v.title,
+          (v) => v.slug || v.id,
+          (v) => v.tags
+        );
+
+        // Merge API results + local catalog results without duplicates
+        const combined = [...results.videos, ...localFiltered];
+        const seenIds = new Set<string>();
+        const uniqueCombined = combined.filter((item) => {
+          const key = (item.slug || item.id || item.title).toLowerCase();
+          if (seenIds.has(key)) return false;
+          seenIds.add(key);
+          return true;
+        });
+
+        // Final strict rank & filter
+        const finalResults = filterAndRankSearchResults<Video>(
+          cleanQuery,
+          uniqueCombined,
+          (v) => v.title,
+          (v) => v.slug || v.id,
+          (v) => v.tags
+        );
+
+        setSearchResults(finalResults);
       } catch (err: any) {
         console.error('Search error:', err);
         setSearchError(err.message || 'Failed to fetch search results.');
@@ -305,9 +355,9 @@ export default function App() {
       }
     };
 
-    const debounceTimer = setTimeout(performSearch, 500);
+    const debounceTimer = setTimeout(performSearch, 400);
     return () => clearTimeout(debounceTimer);
-  }, [searchQuery]);
+  }, [searchQuery, allVideos]);
 
   // Initial load on mount
   useEffect(() => {
@@ -410,17 +460,6 @@ export default function App() {
 
     loadGenre();
   }, [selectedCategory, genreVideosCache]);
-
-  // Combined video list (custom user streams + API recent anime, or fallback to mock catalogue)
-  const allVideos = useMemo(() => {
-    if (apiVideos.length > 0) {
-      return [...customVideos, ...apiVideos];
-    }
-    if (popularVideos.length > 0) {
-      return [...customVideos, ...popularVideos];
-    }
-    return [...customVideos, ...MOCK_VIDEOS];
-  }, [customVideos, apiVideos, popularVideos]);
 
   // Strictly pure anime genres only (no studios, no channels, no non-genre tags)
   const dynamicCategories = useMemo(() => {
@@ -643,6 +682,26 @@ export default function App() {
             />
           )}
 
+          {/* AniReels Vertical Shorts Experience */}
+          {activeView === 'reels' && (
+            <ReelsView
+              onSelectVideo={handleSelectVideo}
+              onBackToHome={handleHomeClick}
+              initialVideo={selectedReelVideo}
+              initialReelMode="anireels"
+            />
+          )}
+
+          {/* AniTrail Anime Trailers Reels Experience */}
+          {activeView === 'anitrail' && (
+            <ReelsView
+              onSelectVideo={handleSelectVideo}
+              onBackToHome={handleHomeClick}
+              initialVideo={selectedReelVideo}
+              initialReelMode="anitrail"
+            />
+          )}
+
           {/* Popular & Trending Dedicated View */}
           {(activeView === 'popular' || activeView === 'trending') && (
             <AnimeCategoryView
@@ -652,6 +711,10 @@ export default function App() {
               videos={popularVideos}
               isLoading={isCategoriesLoading}
               onSelectVideo={handleSelectVideo}
+              onSelectInfo={(video) => {
+                setProfileVideo(video);
+                setIsProfileModalOpen(true);
+              }}
               onBackToHome={handleHomeClick}
             />
           )}
@@ -665,6 +728,10 @@ export default function App() {
               videos={latestVideos}
               isLoading={isCategoriesLoading}
               onSelectVideo={handleSelectVideo}
+              onSelectInfo={(video) => {
+                setProfileVideo(video);
+                setIsProfileModalOpen(true);
+              }}
               onBackToHome={handleHomeClick}
             />
           )}
@@ -678,6 +745,10 @@ export default function App() {
               videos={ongoingVideos}
               isLoading={isCategoriesLoading}
               onSelectVideo={handleSelectVideo}
+              onSelectInfo={(video) => {
+                setProfileVideo(video);
+                setIsProfileModalOpen(true);
+              }}
               onBackToHome={handleHomeClick}
             />
           )}
@@ -691,6 +762,10 @@ export default function App() {
               videos={upcomingVideos}
               isLoading={isCategoriesLoading}
               onSelectVideo={handleSelectVideo}
+              onSelectInfo={(video) => {
+                setProfileVideo(video);
+                setIsProfileModalOpen(true);
+              }}
               onBackToHome={handleHomeClick}
             />
           )}
@@ -704,7 +779,28 @@ export default function App() {
               videos={completedVideos}
               isLoading={isCategoriesLoading}
               onSelectVideo={handleSelectVideo}
+              onSelectInfo={(video) => {
+                setProfileVideo(video);
+                setIsProfileModalOpen(true);
+              }}
               onBackToHome={handleHomeClick}
+            />
+          )}
+
+          {/* AniNews Dedicated View (AniList GraphQL News & Community Updates) */}
+          {(activeView === 'aninews' || activeView === 'news') && (
+            <AniNewsView
+              onSelectVideo={handleSelectVideo}
+              onOpenProfile={(video) => {
+                setProfileVideo(video);
+                setIsProfileModalOpen(true);
+              }}
+              onSearchAnime={(query) => {
+                setSearchQuery(query);
+                setActiveView('home');
+                setSelectedCategory('All');
+                setSelectedVideo(null);
+              }}
             />
           )}
 
@@ -1093,6 +1189,19 @@ export default function App() {
                                   />
                                 ))}
                               </div>
+
+                              {/* AniReels Shorts & AniTrail Shelf appearing periodically while scrolling down (every 2 batches) with different page content */}
+                              {batchIdx % 2 === 0 && (
+                                <HomeReelsShelf
+                                  shelfIndex={Math.floor(batchIdx / 2)}
+                                  onSelectVideo={handleSelectVideo}
+                                  onOpenReelsView={(video, mode) => {
+                                    setSelectedReelVideo(video || null);
+                                    setActiveView(mode === 'anitrail' ? 'anitrail' : 'reels');
+                                  }}
+                                  fallbackVideos={apiVideos.length > 0 ? apiVideos : popularVideos}
+                                />
+                              )}
 
                               {/* Category Reel appearing directly AFTER this Recent Catalogue Batch */}
                               {currentReel && (

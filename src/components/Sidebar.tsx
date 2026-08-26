@@ -15,7 +15,9 @@ import {
   Sparkles, 
   Zap, 
   PlaySquare, 
-  Calendar 
+  Calendar,
+  Newspaper,
+  Film 
 } from 'lucide-react';
 import { Video, ViewMode } from '../types';
 import { MOCK_CHANNELS } from '../data/mockVideos';
@@ -85,6 +87,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Home className="w-5 h-5 text-white shrink-0" />
           <span className="truncate">Home</span>
+        </button>
+
+        <button
+          onClick={() => handleItemClick('reels')}
+          className={`flex items-center gap-4 w-full px-3 py-2.5 rounded-xl font-normal transition-colors cursor-pointer ${
+            activeView === 'reels' ? 'bg-[#272727] font-semibold text-white' : 'text-gray-300 hover:bg-[#222222]'
+          }`}
+        >
+          <Film className="w-5 h-5 text-pink-500 shrink-0" />
+          <div className="flex items-center justify-between flex-1 truncate">
+            <span className="truncate">AniReels</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-linear-to-r from-pink-600 to-rose-500 text-white ml-2 shrink-0">SHORTS</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => handleItemClick('anitrail')}
+          className={`flex items-center gap-4 w-full px-3 py-2.5 rounded-xl font-normal transition-colors cursor-pointer ${
+            activeView === 'anitrail' ? 'bg-[#272727] font-semibold text-white' : 'text-gray-300 hover:bg-[#222222]'
+          }`}
+        >
+          <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
+          <div className="flex items-center justify-between flex-1 truncate">
+            <span className="truncate">AniTrail</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-linear-to-r from-amber-600 to-yellow-500 text-white ml-2 shrink-0">TRAILERS</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => handleItemClick('aninews')}
+          className={`flex items-center gap-4 w-full px-3 py-2.5 rounded-xl font-normal transition-colors cursor-pointer ${
+            activeView === 'aninews' || activeView === 'news' ? 'bg-[#272727] font-semibold text-white' : 'text-gray-300 hover:bg-[#222222]'
+          }`}
+        >
+          <Newspaper className="w-5 h-5 text-red-500 shrink-0" />
+          <div className="flex items-center justify-between flex-1 truncate">
+            <span className="truncate">AniNews</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-linear-to-r from-red-600 to-orange-500 text-white ml-2 shrink-0">ANILIST</span>
+          </div>
         </button>
 
         <button
@@ -341,6 +382,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </button>
 
       <button
+        onClick={() => onSelectView('reels')}
+        className={`flex flex-col items-center justify-center w-16 h-18 rounded-xl transition-colors cursor-pointer ${
+          activeView === 'reels' ? 'bg-[#272727] text-white font-medium' : 'text-gray-400 hover:bg-[#272727] hover:text-white'
+        }`}
+        title="AniReels"
+      >
+        <Film className="w-5 h-5 mb-1.5 text-pink-500" />
+        <span className="text-[10px] truncate max-w-full px-1">Reels</span>
+      </button>
+
+      <button
+        onClick={() => onSelectView('aninews')}
+        className={`flex flex-col items-center justify-center w-16 h-18 rounded-xl transition-colors cursor-pointer ${
+          activeView === 'aninews' || activeView === 'news' ? 'bg-[#272727] text-white font-medium' : 'text-gray-400 hover:bg-[#272727] hover:text-white'
+        }`}
+        title="AniNews (AniList)"
+      >
+        <Newspaper className="w-5 h-5 mb-1.5 text-red-500" />
+        <span className="text-[10px] truncate max-w-full px-1">AniNews</span>
+      </button>
+
+      <button
         onClick={() => onSelectView('popular')}
         className={`flex flex-col items-center justify-center w-16 h-18 rounded-xl transition-colors cursor-pointer ${
           activeView === 'popular' || activeView === 'trending' ? 'bg-[#272727] text-white font-medium' : 'text-gray-400 hover:bg-[#272727] hover:text-white'
@@ -433,7 +496,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Drawer Aside */}
         <aside 
-          className={`fixed top-14 left-0 z-50 h-[calc(100vh-3.5rem)] w-60 shrink-0 bg-[#0f0f0f] shadow-2xl border-r border-[#212121] overflow-y-auto px-3 py-3 text-sm select-none transition-transform duration-300 ease-in-out scrollbar-thin scrollbar-thumb-[#252525] ${
+          className={`fixed top-14 left-0 z-50 h-[calc(100vh-3.5rem)] w-60 shrink-0 bg-[#0f0f0f] shadow-2xl border-r border-[#212121] overflow-y-auto px-3 py-3 text-sm select-none transition-transform duration-300 ease-in-out ${
             isOpen ? 'translate-x-0 shadow-2xl shadow-black/80' : '-translate-x-full pointer-events-none'
           }`}
         >
@@ -456,7 +519,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Mobile Drawer (visible only on mobile when toggled) */}
       <aside 
-        className={`fixed top-14 left-0 z-50 h-[calc(100vh-3.5rem)] w-60 shrink-0 bg-[#0f0f0f] shadow-2xl border-r border-[#212121] overflow-y-auto px-3 py-3 text-sm select-none transition-transform duration-300 ease-in-out md:hidden scrollbar-thin scrollbar-thumb-[#252525] ${
+        className={`fixed top-14 left-0 z-50 h-[calc(100vh-3.5rem)] w-60 shrink-0 bg-[#0f0f0f] shadow-2xl border-r border-[#212121] overflow-y-auto px-3 py-3 text-sm select-none transition-transform duration-300 ease-in-out md:hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
         }`}
       >
@@ -465,7 +528,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Desktop Animated Sidebar Container (animates between 240px and 72px width) */}
       <aside 
-        className={`hidden md:flex flex-col sticky top-14 h-[calc(100vh-3.5rem)] shrink-0 bg-[#0f0f0f] border-r border-[#212121] overflow-y-auto overflow-x-hidden transition-all duration-300 ease-in-out select-none text-sm scrollbar-thin scrollbar-thumb-[#252525] ${
+        className={`hidden md:flex flex-col sticky top-14 h-[calc(100vh-3.5rem)] shrink-0 bg-[#0f0f0f] border-r border-[#212121] overflow-y-auto overflow-x-hidden transition-all duration-300 ease-in-out select-none text-sm ${
           isOpen ? 'w-60 px-3 py-3' : 'w-[72px] px-1 py-2 items-center'
         }`}
       >

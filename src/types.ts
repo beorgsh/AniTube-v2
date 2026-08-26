@@ -42,6 +42,18 @@ export interface StreamSource {
   outro?: SkipInterval;
 }
 
+export interface AnimeStreamResult {
+  streamUrl: string;
+  rawM3u8Url?: string;
+  subtitles?: SubtitleTrack[];
+  servers?: StreamSource[];
+  defaultEnglishVtt?: SubtitleTrack;
+  intro?: SkipInterval;
+  outro?: SkipInterval;
+  slug?: string;
+  sourceType?: 'slug' | 'mal';
+}
+
 export interface Video {
   id: string;
   malId?: number | string;
@@ -78,6 +90,14 @@ export interface Video {
   progressPercent?: number;
   isLive?: boolean;
   isShort?: boolean;
+  isTrailer?: boolean;
+  youtubeId?: string;
+  embedUrl?: string;
+  japaneseTitle?: string;
+  score?: number;
+  rank?: number;
+  studios?: string[];
+  genres?: string[];
 }
 
 export interface AnikotoCategoryItem {
@@ -154,8 +174,40 @@ export interface AnimeInfoData {
   recommendations?: AnimeRecommendationItem[];
 }
 
+export interface AnimeNewsItem {
+  id: string | number;
+  title: string;
+  body: string;
+  summary?: string;
+  image: string;
+  bannerImage?: string;
+  createdAt: number | string;
+  author: {
+    name: string;
+    avatar: string;
+  };
+  siteUrl?: string;
+  category: string;
+  replyCount?: number;
+  viewCount?: number;
+  tags?: string[];
+  media?: {
+    id?: number | string;
+    title: string;
+    coverImage?: string;
+    bannerImage?: string;
+    genres?: string[];
+    format?: string;
+    status?: string;
+    episodes?: number | string;
+    averageScore?: number;
+    year?: number;
+  };
+}
+
 export type ViewMode =
   | 'home'
+  | 'reels'
   | 'watch'
   | 'trending'
   | 'popular'
@@ -164,9 +216,13 @@ export type ViewMode =
   | 'upcoming'
   | 'completed'
   | 'genre'
+  | 'aninews'
+  | 'anitrail'
+  | 'news'
   | 'subscriptions'
   | 'library'
   | 'history'
   | 'watch_later'
   | 'liked';
+
 

@@ -41,7 +41,7 @@ app.use(express.json());
       });
 
       if (!response.ok) {
-        return res.status(response.status).json({ success: false, error: `Failed to fetch ${type} from Anikoto API` });
+        return res.status(200).json({ success: false, isRateLimited: response.status === 429, error: `Failed to fetch ${type} from Anikoto API`, data: [] });
       }
 
       const data = await response.json();
@@ -158,16 +158,122 @@ app.use(express.json());
     res.status(500).json({ ok: false, error: 'Failed to load recent anime' });
   });
 
-  // Proxy for search
+  // Proxy for search with Advanced Connected Keyword Relevance Filtering
   app.get('/api/anime/search', async (req, res) => {
     const { keyword, page = '1' } = req.query;
-    if (!keyword) {
+    if (!keyword || typeof keyword !== 'string' || !keyword.trim()) {
       return res.status(400).json({ success: false, error: 'keyword query parameter is required' });
     }
 
+    const rawKeyword = String(keyword).trim();
+    // Clean noise words like [Spoilers], Episode 12, Discussion, etc.
+    const cleanKeyword = rawKeyword
+      .replace(/^\[.*?\]/g, '')
+      .replace(/\(.*?\)/g, '')
+      .replace(/【.*?】/g, '')
+      .replace(/Episode\s+\d+/gi, '')
+      .replace(/Ep\.?\s*\d+/gi, '')
+      .replace(/\bDiscussion\b.*/gi, '')
+      .replace(/\bAnnouncement\b.*/gi, '')
+      .replace(/\bOfficial\b.*/gi, '')
+      .replace(/\bReview\b.*/gi, '')
+      .replace(/\bTrailer\b.*/gi, '')
+      .replace(/\bMegathread\b.*/gi, '')
+      .replace(/[-–—:|]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim() || rawKeyword;
+
+    // Helper to evaluate and filter connected anime
+    const filterAndRank = (items: any[], queryStr: string) => {
+      const STOP_WORDS = new Set([
+        'the', 'a', 'an', 'in', 'on', 'of', 'and', 'to', 'for', 'with', 'at', 'by',
+        'from', 'episode', 'episodes', 'ep', 'season', 'seasons', 'discussion',
+        'announcement', 'part', 'movie', 'movies', 'tv', 'special', 'specials',
+        'recap', 'ova', 'ona', 'is', 'it', 'arc', 'official', 'news', 'spoilers',
+        'spoiler', 'chapter', 'sub', 'dub', 'no', 'ga', 'wa', 'ni', 'de', 'wo', 'ka'
+      ]);
+
+      const normalize = (t: string) =>
+        (t || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      const qNorm = normalize(queryStr);
+      const rawTokens = qNorm.split(' ').filter(Boolean);
+      const sigTokens = rawTokens.filter(t => !STOP_WORDS.has(t) && t.length >= 2);
+      const tokens = sigTokens.length > 0 ? sigTokens : rawTokens;
+
+      const scored: { item: any; score: number }[] = [];
+
+      for (const it of items) {
+        const titleNorm = normalize(it.title || '');
+        const slugNorm = normalize((it.id || it.slug || '').replace(/[-_]/g, ' '));
+        const combined = `${titleNorm} ${slugNorm}`;
+
+        // Exact match
+        if (titleNorm === qNorm || slugNorm === qNorm) {
+          scored.push({ item: it, score: 1000 });
+          continue;
+        }
+
+        // Exact phrase match
+        const exactPhrase = combined.includes(qNorm);
+
+        // Token match count
+        let matchedCount = 0;
+        const matchedList: string[] = [];
+        for (const tok of tokens) {
+          if (combined.includes(tok)) {
+            matchedCount++;
+            matchedList.push(tok);
+          }
+        }
+
+        const ratio = tokens.length > 0 ? matchedCount / tokens.length : 0;
+        let isConnected = false;
+
+        if (exactPhrase) {
+          isConnected = true;
+        } else if (tokens.length === 1) {
+          isConnected = matchedCount >= 1;
+        } else if (tokens.length === 2) {
+          isConnected = matchedCount >= 2;
+        } else if (tokens.length === 3) {
+          isConnected = matchedCount >= 2;
+        } else {
+          isConnected = matchedCount >= Math.ceil(tokens.length * 0.5) && matchedCount >= 2;
+        }
+
+        // For multi-word queries without exact phrase, verify primary keyword is present
+        if (isConnected && tokens.length >= 2 && !exactPhrase) {
+          const primaryToken = tokens[0];
+          if (!matchedList.includes(primaryToken) && ratio < 0.75) {
+            isConnected = false;
+          }
+        }
+
+        if (isConnected) {
+          let score = (exactPhrase ? 500 : 200) + ratio * 300 + matchedCount * 50;
+          if (titleNorm.startsWith(qNorm) || (tokens.length > 0 && titleNorm.startsWith(tokens[0]))) {
+            score += 80;
+          }
+          const diff = Math.abs(titleNorm.length - qNorm.length);
+          score -= Math.min(diff * 0.5, 60);
+          scored.push({ item: it, score });
+        }
+      }
+
+      scored.sort((a, b) => b.score - a.score);
+      return scored.map(s => s.item);
+    };
+
     try {
-      // 1. Try Primary API
-      const primaryUrl = `https://anikototvapi.vercel.app/api/search?keyword=${encodeURIComponent(keyword as string)}&page=${page}`;
+      // 1. Try Primary API with clean keyword
+      const primaryUrl = `https://anikototvapi.vercel.app/api/search?keyword=${encodeURIComponent(cleanKeyword)}&page=${page}`;
       const primaryRes = await fetch(primaryUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
       });
@@ -178,7 +284,6 @@ app.use(express.json());
         if (primaryData.success && primaryData.results && Array.isArray(primaryData.results.data)) {
           // Normalize to AnikotoCategoryItem format
           const normalizedData = primaryData.results.data.map((item: any) => {
-            // Slug might be "road-of-naruto-ggjw8/ep-1", we need "road-of-naruto-ggjw8"
             let id = item.slug || '';
             if (id.includes('/')) id = id.split('/')[0];
             
@@ -193,9 +298,11 @@ app.use(express.json());
             };
           });
           
+          const filteredResults = filterAndRank(normalizedData, cleanKeyword);
+
           return res.json({
             success: true,
-            data: normalizedData,
+            data: filteredResults,
             source: 'primary',
             page: parseInt(page as string),
             totalPages: primaryData.results.totalPages || 1
@@ -204,7 +311,7 @@ app.use(express.json());
       }
 
       // 2. Fallback API
-      const fallbackUrl = `https://anikoto-api.vercel.app/api/search?keyword=${encodeURIComponent(keyword as string)}`;
+      const fallbackUrl = `https://anikoto-api.vercel.app/api/search?keyword=${encodeURIComponent(cleanKeyword)}`;
       const fallbackRes = await fetch(fallbackUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
       });
@@ -212,9 +319,11 @@ app.use(express.json());
       if (fallbackRes.ok) {
         const fallbackData = await fallbackRes.json();
         if (fallbackData.success && Array.isArray(fallbackData.data)) {
+          const filteredResults = filterAndRank(fallbackData.data, cleanKeyword);
+
           return res.json({
             success: true,
-            data: fallbackData.data, // already in AnikotoCategoryItem format
+            data: filteredResults,
             source: 'fallback',
             page: 1,
             totalPages: 1
@@ -244,7 +353,7 @@ app.use(express.json());
       });
 
       if (!response.ok) {
-        return res.status(response.status).json({ success: false, error: `Upstream error ${response.status}` });
+        return res.status(200).json({ success: false, isRateLimited: response.status === 429, error: `Upstream error ${response.status}` });
       }
 
       const data = await response.json();
@@ -272,7 +381,7 @@ app.use(express.json());
       });
 
       if (!response.ok) {
-        return res.status(response.status).json({ success: false, error: `Upstream error ${response.status}` });
+        return res.status(200).json({ success: false, isRateLimited: response.status === 429, error: `Upstream genre error ${response.status}` });
       }
 
       const data = await response.json();
@@ -332,7 +441,7 @@ app.use(express.json());
       });
 
       if (!response.ok) {
-        return res.status(response.status).json({ success: false, error: `Metadata upstream error ${response.status}` });
+        return res.status(200).json({ success: false, isRateLimited: response.status === 429, error: `Metadata upstream error ${response.status}` });
       }
 
       const data = await response.json();
@@ -340,6 +449,252 @@ app.use(express.json());
     } catch (error: any) {
       console.error('Metadata API error:', error);
       res.status(500).json({ success: false, error: 'Failed to fetch anime episode metadata' });
+    }
+  });
+
+  // AniNews: AniList GraphQL News & Announcements API
+  app.get('/api/anime/news', async (req, res) => {
+    const page = parseInt((req.query.page as string) || '1', 10);
+    const perPage = parseInt((req.query.per_page as string) || '15', 10);
+    const search = req.query.search as string | undefined;
+    const category = req.query.category as string | undefined;
+    const shuffle = req.query.shuffle === 'true' || req.query.random === 'true';
+
+    try {
+      // Dynamic page exploration when randomizing so each refresh or load pulls from varied depths
+      const queryPage = shuffle && !search ? Math.floor(Math.random() * 4) + 1 : page;
+
+      const graphQLQuery = `
+        query ($page: Int, $perPage: Int, $search: String) {
+          Page(page: $page, perPage: $perPage) {
+            pageInfo {
+              total
+              currentPage
+              hasNextPage
+              perPage
+            }
+            threads(search: $search, sort: [ID_DESC]) {
+              id
+              title
+              body
+              createdAt
+              replyCount
+              viewCount
+              siteUrl
+              user {
+                id
+                name
+                avatar {
+                  large
+                  medium
+                }
+              }
+              categories {
+                id
+                name
+              }
+              mediaCategories {
+                id
+                title {
+                  romaji
+                  english
+                  native
+                  userPreferred
+                }
+                coverImage {
+                  extraLarge
+                  large
+                  medium
+                }
+                bannerImage
+                genres
+                averageScore
+                popularity
+                format
+                seasonYear
+                episodes
+                status
+                description
+                siteUrl
+              }
+            }
+          }
+          trendingMedia: Page(page: 1, perPage: 16) {
+            media(type: ANIME, sort: [TRENDING_DESC]) {
+              id
+              title {
+                english
+                romaji
+                userPreferred
+              }
+              coverImage {
+                extraLarge
+                large
+              }
+              bannerImage
+              description
+              averageScore
+              format
+              status
+              episodes
+              nextAiringEpisode {
+                airingAt
+                timeUntilAiring
+                episode
+              }
+              genres
+            }
+          }
+        }
+      `;
+
+      const aniListResponse = await fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': 'AniTube-News-Agent/1.0',
+        },
+        body: JSON.stringify({
+          query: graphQLQuery,
+          variables: {
+            page: queryPage,
+            perPage: Math.max(perPage, 18),
+            search: search && search.trim() ? search.trim() : undefined,
+          },
+        }),
+      });
+
+      if (!aniListResponse.ok) {
+        return res.status(200).json({
+          success: false,
+          isRateLimited: aniListResponse.status === 429,
+          error: `AniList API status: ${aniListResponse.statusText}`,
+          data: [],
+        });
+      }
+
+      const rawJson = await aniListResponse.json();
+      let rawThreads = rawJson?.data?.Page?.threads || [];
+      let trendingMediaList = rawJson?.data?.trendingMedia?.media || [];
+
+      // Fisher-Yates shuffle algorithm for organic variety
+      const shuffleArray = <T>(arr: T[]): T[] => {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      };
+
+      if (shuffle || !search) {
+        rawThreads = shuffleArray(rawThreads);
+        trendingMediaList = shuffleArray(trendingMediaList);
+      }
+
+      // Helper to extract image urls from body markdown if no mediaCategories cover
+      const extractImageFromBody = (body: string): string | null => {
+        if (!body) return null;
+        const imgMatch = body.match(/img\d*?\((https?:\/\/[^\s\)]+)\)/i) ||
+                         body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i) ||
+                         body.match(/(https?:\/\/[^\s\)]+?\.(?:jpg|jpeg|png|webp|gif))/i);
+        return imgMatch ? imgMatch[1] : null;
+      };
+
+      // Helper to clean markdown / html for short summary
+      const cleanSummary = (text: string, maxLen = 220): string => {
+        if (!text) return '';
+        const cleaned = text
+          .replace(/~~~[\s\S]*?~~~/g, '')
+          .replace(/img\d*?\([^\)]*\)/gi, '')
+          .replace(/!\[.*?\]\(.*?\)/g, '')
+          .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+          .replace(/[#*_~`]/g, '')
+          .replace(/<[^>]*>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return cleaned.length > maxLen ? cleaned.slice(0, maxLen) + '...' : cleaned;
+      };
+
+      // Format news items
+      const newsItems = rawThreads.map((thread: any, idx: number) => {
+        const media = thread.mediaCategories && thread.mediaCategories.length > 0 ? thread.mediaCategories[0] : null;
+        const bodyImage = extractImageFromBody(thread.body);
+        const fallbackTrending = trendingMediaList[idx % Math.max(1, trendingMediaList.length)];
+
+        const bestImage =
+          media?.bannerImage ||
+          bodyImage ||
+          media?.coverImage?.extraLarge ||
+          media?.coverImage?.large ||
+          fallbackTrending?.bannerImage ||
+          fallbackTrending?.coverImage?.large ||
+          'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+
+        const categoryName = thread.categories?.[0]?.name || (media ? 'Anime Update' : 'Discussion');
+
+        const mediaTitle = media?.title?.english || media?.title?.romaji || media?.title?.userPreferred || '';
+
+        return {
+          id: thread.id,
+          title: thread.title || 'Anime Community Update',
+          body: thread.body || '',
+          summary: cleanSummary(thread.body || media?.description || ''),
+          image: bestImage,
+          bannerImage: media?.bannerImage || fallbackTrending?.bannerImage || bestImage,
+          createdAt: thread.createdAt ? thread.createdAt * 1000 : Date.now(),
+          author: {
+            name: thread.user?.name || 'AniList Staff',
+            avatar: thread.user?.avatar?.large || thread.user?.avatar?.medium || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+          },
+          siteUrl: thread.siteUrl || `https://anilist.co/forum/thread/${thread.id}`,
+          category: categoryName,
+          replyCount: thread.replyCount || 0,
+          viewCount: thread.viewCount || Math.floor(Math.random() * 800) + 120,
+          tags: media?.genres || ['Anime', 'News', 'AniList'],
+          media: media ? {
+            id: media.id,
+            title: mediaTitle,
+            coverImage: media.coverImage?.large || media.coverImage?.medium,
+            bannerImage: media.bannerImage,
+            genres: media.genres,
+            format: media.format,
+            status: media.status,
+            episodes: media.episodes,
+            averageScore: media.averageScore,
+            year: media.seasonYear,
+          } : undefined,
+        };
+      });
+
+      res.setHeader('Cache-Control', 'public, max-age=180');
+      res.json({
+        success: true,
+        source: 'AniList GraphQL',
+        page,
+        perPage,
+        hasNextPage: rawJson?.data?.Page?.pageInfo?.hasNextPage || false,
+        total: rawJson?.data?.Page?.pageInfo?.total || newsItems.length,
+        data: newsItems,
+        trendingSpotlight: trendingMediaList.map((m: any) => ({
+          id: m.id,
+          title: m.title?.english || m.title?.romaji || m.title?.userPreferred || 'Anime Announcement',
+          image: m.bannerImage || m.coverImage?.extraLarge || m.coverImage?.large,
+          cover: m.coverImage?.large,
+          description: cleanSummary(m.description || '', 180),
+          score: m.averageScore,
+          genres: m.genres || [],
+          status: m.status,
+          nextEpisode: m.nextAiringEpisode ? {
+            ep: m.nextAiringEpisode.episode,
+            timeUntil: m.nextAiringEpisode.timeUntilAiring,
+          } : null,
+        })),
+      });
+    } catch (error: any) {
+      console.error('AniNews API error:', error);
+      res.status(500).json({ success: false, error: error?.message || 'Failed to fetch AniList anime news' });
     }
   });
 

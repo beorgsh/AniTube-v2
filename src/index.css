@@ -13,21 +13,32 @@
     overflow-x: hidden;
   }
 
-  /* Custom YouTube scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  /* Globally remove and hide all scroll indicators / scrollbars while maintaining full scrolling */
+  * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
   }
   ::-webkit-scrollbar-track {
-    background: transparent;
+    background: transparent !important;
   }
   ::-webkit-scrollbar-thumb {
-    background: #555555;
-    border-radius: 4px;
+    background: transparent !important;
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #717171;
-  }
+}
+
+/* Disable and hide built-in Video.js loading spinner */
+.video-js .vjs-loading-spinner,
+.vjs-loading-spinner {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* Video.js YouTube Dark Theme Overrides */

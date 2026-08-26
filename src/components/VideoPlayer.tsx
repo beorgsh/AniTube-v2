@@ -950,7 +950,7 @@ export const VideoPlayer = ({
             </div>
 
             {/* Tab content wrapper (Scrollable area) */}
-            <div className="overflow-y-auto max-h-[220px] mt-4 pr-1 space-y-4 scrollbar-thin">
+            <div className="overflow-y-auto max-h-[220px] mt-4 pr-1 space-y-4">
               {activeSettingsTab === 'stream' && (
                 <div className="space-y-3.5">
                   <div className="grid grid-cols-2 gap-2 bg-[#0d0d0d] p-2.5 rounded-xl text-[11px] text-gray-300 border border-white/5">

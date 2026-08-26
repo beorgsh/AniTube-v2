@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { 
   Menu, 
   Search, 
   Mic, 
   Bell, 
   X, 
+  ArrowLeft,
   User,
   Settings,
   HelpCircle,
@@ -51,6 +52,15 @@ export const Header = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showMobileSearch) {
+      setTimeout(() => {
+        mobileSearchInputRef.current?.focus();
+      }, 60);
+    }
+  }, [showMobileSearch]);
 
   const searchSuggestions = [
     'Jujutsu Kaisen Season 3 trailer',
@@ -66,7 +76,92 @@ export const Header = ({
   );
 
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between h-14 px-4 bg-[#0f0f0f]/95 backdrop-blur-md border-b border-[#212121] select-none">
+    <header className="sticky top-0 z-50 flex items-center justify-between h-14 px-3 sm:px-4 bg-[#0f0f0f] border-b border-[#212121] select-none">
+      {/* Dedicated Full-Width Mobile Search Bar Takeover (Prevents any background elements from showing) */}
+      {showMobileSearch ? (
+        <div className="absolute inset-0 z-50 flex items-center gap-2 px-2.5 sm:px-3 h-14 bg-[#0f0f0f] w-full border-b border-[#212121] animate-in fade-in duration-150">
+          <button
+            onClick={() => {
+              setShowMobileSearch(false);
+              setIsSearchFocused(false);
+            }}
+            aria-label="Back"
+            className="p-2 rounded-full hover:bg-[#272727] text-white transition-colors shrink-0 cursor-pointer"
+            title="Back"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-200 hover:text-white" />
+          </button>
+
+          <div className="relative flex-1 flex items-center">
+            <div className="flex items-center w-full h-10 bg-[#121212] border border-[#303030] focus-within:border-[#555555] rounded-full overflow-hidden px-3 transition-colors">
+              <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+              <input
+                ref={mobileSearchInputRef}
+                type="text"
+                id="input-mobile-search"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search anime, episodes, trailers, OSTs..."
+                className="w-full bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-0 pr-1"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSearchChange('');
+                  }}
+                  className="p-1 text-gray-400 hover:text-white shrink-0 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Mobile Autocomplete Suggestions Dropdown */}
+            {searchSuggestions.length > 0 && searchQuery && (
+              <div className="absolute top-12 left-0 right-0 z-50 bg-[#212121] border border-[#303030] rounded-xl shadow-2xl py-1.5 overflow-hidden text-sm">
+                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-b border-[#2a2a2a]">
+                  Suggestions
+                </div>
+                {searchSuggestions.slice(0, 5).map((item, idx) => (
+                  <div
+                    key={idx}
+                    onMouseDown={() => {
+                      onSearchChange(item);
+                      setShowMobileSearch(false);
+                    }}
+                    className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-[#303030] cursor-pointer text-gray-200 transition-colors"
+                  >
+                    <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                    <span className="truncate text-xs">{item}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => {
+              setShowMobileSearch(false);
+              onOpenVoiceModal();
+            }}
+            id="btn-mobile-voice-search"
+            aria-label="Search with voice"
+            className="p-2.5 rounded-full bg-[#222222] hover:bg-[#272727] text-white transition-colors shrink-0 cursor-pointer"
+            title="Search with your voice"
+          >
+            <Mic className="w-5 h-5" />
+          </button>
+        </div>
+      ) : null}
+
       {/* Left section: Hamburger & Logo */}
       <div className="flex items-center gap-4 min-w-[170px]">
         <button
@@ -103,10 +198,10 @@ export const Header = ({
         </div>
       </div>
 
-      {/* Middle section: Search & Voice */}
-      <div className={`flex-1 max-w-[720px] mx-4 ${showMobileSearch ? 'flex absolute inset-x-2 top-2 z-50 bg-[#0f0f0f] px-2 py-1 rounded-lg' : 'hidden md:flex'} items-center justify-center`}>
+      {/* Middle section: Desktop Search & Voice */}
+      <div className="hidden md:flex flex-1 max-w-[720px] mx-4 items-center justify-center">
         <div className="relative flex items-center w-full max-w-[600px]">
-          <div className={`flex items-center w-full h-10 bg-[#121212] border ${isSearchFocused ? 'border-[#1c62b9]' : 'border-[#303030]'} rounded-l-full overflow-hidden transition-colors pl-4`}>
+          <div className={`flex items-center w-full h-10 bg-[#121212] border ${isSearchFocused ? 'border-[#555555]' : 'border-[#303030]'} rounded-l-full overflow-hidden transition-colors pl-4`}>
             {isSearchFocused && (
               <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
             )}
@@ -119,15 +214,22 @@ export const Header = ({
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
               placeholder="Search anime, episodes, trailers, OSTs..."
-              className="w-full bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none pr-2"
+              className="w-full bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-0 pr-2"
             />
             {searchQuery && (
               <button
-                onClick={() => {
-                  onSearchChange('');
-                  searchInputRef.current?.focus();
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                 }}
-                className="p-1 mr-2 text-gray-400 hover:text-white"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSearchChange('');
+                }}
+                className="p-1 mr-2 text-gray-400 hover:text-white cursor-pointer"
+                title="Clear search"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -170,20 +272,11 @@ export const Header = ({
           onClick={onOpenVoiceModal}
           id="btn-voice-search"
           aria-label="Search with voice"
-          className="p-2.5 ml-3 rounded-full bg-[#222222] hover:bg-[#272727] text-white transition-colors shrink-0"
+          className="p-2.5 ml-3 rounded-full bg-[#222222] hover:bg-[#272727] text-white transition-colors shrink-0 cursor-pointer"
           title="Search with your voice"
         >
           <Mic className="w-5 h-5" />
         </button>
-
-        {showMobileSearch && (
-          <button
-            onClick={() => setShowMobileSearch(false)}
-            className="p-2 ml-2 text-gray-400 hover:text-white"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
       </div>
 
       {/* Right section: Create, Notifications, Profile */}

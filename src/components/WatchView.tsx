@@ -796,7 +796,7 @@ export const WatchView = ({
                       <div className="px-3 py-1.5 text-[11px] font-semibold text-[#aaaaaa] uppercase tracking-wider border-b border-[#2e2e2e]">
                         Select Server
                       </div>
-                      <div className="py-1 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-[#333]">
+                      <div className="py-1 max-h-64 overflow-y-auto">
                         {servers.map((srv, idx) => (
                           <button
                             key={idx}
@@ -1164,7 +1164,7 @@ export const WatchView = ({
             </div>
 
             {/* Episode Scrollable List Area */}
-            <div className="p-2.5 overflow-y-auto space-y-2 flex-1 scrollbar-thin scrollbar-thumb-[#333] scrollbar-track-transparent">
+            <div className="p-2.5 overflow-y-auto space-y-2 flex-1">
               
               {/* Skeleton Loader while Anime Info / Episode List metadata is loading */}
               {isLoadingInfo ? (
@@ -1357,7 +1357,7 @@ export const WatchView = ({
                 <span className="text-[10px] text-[#aaaaaa]">Franchise</span>
               </div>
 
-              <div className="flex sm:grid overflow-x-auto sm:overflow-y-auto no-scrollbar sm:grid-cols-2 gap-2 max-h-64 pr-0.5 scrollbar-thin scrollbar-thumb-[#333] pb-1 sm:pb-0">
+              <div className="flex sm:grid overflow-x-auto sm:overflow-y-auto no-scrollbar sm:grid-cols-2 gap-2 max-h-64 pr-0.5 pb-1 sm:pb-0">
                 {animeInfo.seasons.map((season) => (
                   <div
                     key={season.id}

@@ -34,33 +34,31 @@ export const VideoCard = ({
         {/* Top / Left: Card Thumbnail Container */}
         <div 
           onClick={() => onSelectVideo(video)}
-          className="relative w-full sm:w-56 md:w-64 lg:w-72 aspect-video rounded-2xl sm:rounded-xl overflow-hidden bg-[#212121] shrink-0 shadow-md"
+          className="relative w-full sm:w-56 md:w-64 lg:w-72 aspect-video rounded-xl sm:rounded-xl overflow-hidden bg-[#161616] shrink-0 shadow-md border border-[#272727]"
         >
-          {isGenreCard && isGenreBlurOverlay ? (
-            <>
-              {/* Background blurred image */}
-              <div className="absolute inset-0 overflow-hidden">
+          {isGenreCard || isGenreBlurOverlay || video.poster ? (
+            <div className="relative w-full h-full flex items-center justify-center bg-radial from-[#222222] to-[#111111]">
+              {/* Subtle smooth ambient backdrop */}
+              <div className="absolute inset-0 overflow-hidden opacity-30">
                 <FadeImage
-                  src={video.thumbnail}
+                  src={video.poster || video.thumbnail}
                   alt={video.title}
-                  className="w-full h-full object-cover filter blur-lg scale-125 opacity-70"
+                  className="w-full h-full object-cover filter blur-md scale-110"
                   containerClassName="w-full h-full"
                 />
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-md" />
+                <div className="absolute inset-0 bg-[#0f0f0f]/60" />
               </div>
 
-              {/* Center Overlay: Poster Portrait with Blur BG */}
-              <div className="absolute inset-0 flex items-center justify-center p-1.5 z-10">
-                <div className="h-[92%] aspect-[2/3] rounded-lg overflow-hidden shadow-xl border border-white/20 bg-[#181818]">
-                  <FadeImage
-                    src={video.thumbnail}
-                    alt={video.title}
-                    className="w-full h-full object-cover"
-                    containerClassName="w-full h-full"
-                  />
-                </div>
+              {/* Center Overlay: Sharp, Crystal-Clear Portrait Poster */}
+              <div className="relative z-10 h-[90%] aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border border-white/20 bg-[#1a1a1a]">
+                <FadeImage
+                  src={video.poster || video.thumbnail}
+                  alt={video.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  containerClassName="w-full h-full"
+                />
               </div>
-            </>
+            </div>
           ) : (
             <FadeImage
               src={video.thumbnail}
@@ -209,33 +207,31 @@ export const VideoCard = ({
       {/* Thumbnail Container */}
       <div 
         onClick={() => onSelectVideo(video)}
-        className="relative aspect-video w-full rounded-2xl overflow-hidden bg-[#212121] shadow-lg"
+        className="relative aspect-video w-full rounded-xl overflow-hidden bg-[#161616] shadow-lg border border-[#272727]"
       >
         {isGenreCard && isGenreBlurOverlay ? (
-          <>
-            {/* Background blurred image */}
-            <div className="absolute inset-0 overflow-hidden">
+          <div className="relative w-full h-full flex items-center justify-center bg-radial from-[#222222] to-[#111111]">
+            {/* Background subtle smooth ambient backdrop */}
+            <div className="absolute inset-0 overflow-hidden opacity-30">
               <FadeImage
-                src={video.thumbnail}
+                src={video.poster || video.thumbnail}
                 alt={video.title}
-                className="w-full h-full object-cover filter blur-xl scale-125 opacity-70"
+                className="w-full h-full object-cover filter blur-md scale-110"
                 containerClassName="w-full h-full"
               />
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-md" />
+              <div className="absolute inset-0 bg-[#0f0f0f]/60" />
             </div>
 
-            {/* Center Overlay: Poster Portrait with Blur BG */}
-            <div className="absolute inset-0 flex items-center justify-center p-2 z-10">
-              <div className="h-[92%] aspect-[2/3] rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-[#181818] transform group-hover:scale-105 transition-transform duration-300">
-                <FadeImage
-                  src={video.thumbnail}
-                  alt={video.title}
-                  className="w-full h-full object-cover"
-                  containerClassName="w-full h-full"
-                />
-              </div>
+            {/* Center Overlay: Sharp Crystal-Clear Portrait Poster */}
+            <div className="relative z-10 h-[90%] aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border border-white/20 bg-[#1a1a1a] transform group-hover:scale-105 transition-transform duration-300">
+              <FadeImage
+                src={video.poster || video.thumbnail}
+                alt={video.title}
+                className="w-full h-full object-cover"
+                containerClassName="w-full h-full"
+              />
             </div>
-          </>
+          </div>
         ) : (
           <FadeImage
             src={video.thumbnail}

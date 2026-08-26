@@ -300,7 +300,7 @@ export const AvatarSetupModal: React.FC<AvatarSetupModalProps> = ({
         </div>
 
         {/* Avatar Style Picker Grid */}
-        <div className="space-y-4 max-h-[220px] sm:max-h-[260px] overflow-y-auto pr-1 custom-scrollbar">
+        <div className="space-y-4 max-h-[220px] sm:max-h-[260px] overflow-y-auto pr-1">
           {categories.map((category) => {
             const stylesInCat = AVATAR_STYLES.filter((s) => s.category === category);
             return (
