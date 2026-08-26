@@ -123,6 +123,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   const playerRef = useRef<Player | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  // Stable refs for event listeners to avoid closure capture bugs
+  const currentAnimeRef = useRef<Video | null>(null);
+  const reelModeRef = useRef<string>('anireels');
+  const handleNextReelRef = useRef<() => void>(() => {});
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -343,6 +348,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
   // 3. Video.js Player Setup & Stream Synchronization
   const currentAnime = reels[currentIndex];
 
+  useEffect(() => {
+    currentAnimeRef.current = currentAnime;
+  }, [currentAnime]);
+
+  useEffect(() => {
+    reelModeRef.current = reelMode;
+  }, [reelMode]);
+
   const handleSeekToMidpoint = useCallback(() => {
     if (!playerRef.current || hasSeekedToMiddleRef.current || reelMode !== 'anireels') return;
     const player = playerRef.current;
@@ -477,14 +490,15 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               setIsVideoReady(true);
             }
 
-            if (reelMode === 'anireels') {
+            if (reelModeRef.current === 'anireels') {
               if (!hasSeekedToMiddleRef.current && dur > 0) {
                 handleSeekToMidpoint();
               }
 
               // 30-Second Clip End Limit check: record shown blur state and auto-repeat
               if (clipEndTimeRef.current > 0 && cur >= clipEndTimeRef.current) {
-                const key = currentAnime ? (currentAnime.slug || currentAnime.id) : '';
+                const anime = currentAnimeRef.current;
+                const key = anime ? (anime.slug || anime.id) : '';
                 if (key) {
                   setShownBlurMap(prev => ({ ...prev, [key]: true }));
                 }
@@ -508,8 +522,9 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         });
         playerRef.current.on('pause', () => setIsPlaying(false));
         playerRef.current.on('ended', () => {
-          if (reelMode === 'anireels') {
-            const key = currentAnime ? (currentAnime.slug || currentAnime.id) : '';
+          if (reelModeRef.current === 'anireels') {
+            const anime = currentAnimeRef.current;
+            const key = anime ? (anime.slug || anime.id) : '';
             if (key) {
               setShownBlurMap(prev => ({ ...prev, [key]: true }));
             }
@@ -523,7 +538,7 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
               setIsClipEnded(false);
             }
           } else {
-            handleNextReel();
+            handleNextReelRef.current();
           }
         });
         playerRef.current.on('error', () => {
@@ -593,6 +608,10 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
     }
   };
 
+  useEffect(() => {
+    handleNextReelRef.current = handleNextReel;
+  }, [handleNextReel]);
+
   const [tapAnim, setTapAnim] = useState<{ type: 'play' | 'pause'; key: number } | null>(null);
   const lastTapTimeRef = useRef<number>(0);
 
@@ -624,11 +643,11 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
         playerRef.current.pause();
       } catch (_) {}
       setIsPlaying(false);
-      setTapAnim({ type: 'pause', key: newKey });
+      setTapAnim({ type: 'play', key: newKey });
     } else {
       playerRef.current.play().then(() => {
         setIsPlaying(true);
-        setTapAnim({ type: 'play', key: newKey });
+        setTapAnim({ type: 'pause', key: newKey });
       }).catch(console.warn);
     }
 
@@ -1015,21 +1034,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({
                 </div>
               )}
 
-              {/* Play / Pause Center Overlay Indicator */}
-              {!isPlaying && !isBuffering && isVideoReady && (
-                <div className="absolute inset-0 flex items-center justify-center z-30 transition-all pointer-events-none">
-                  <Play className="w-12 h-12 text-white fill-current drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
-                </div>
-              )}
-
               {/* Tap Pause / Play Center Pulse Feedback */}
               {tapAnim && (
                 <div className="absolute inset-0 flex items-center justify-center z-45 pointer-events-none">
                   <div key={tapAnim.key} className="animate-tap-feedback flex items-center justify-center">
                     {tapAnim.type === 'pause' ? (
-                      <Pause className="w-12 h-12 text-white fill-current drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
+                      <Pause className="w-10 h-10 text-white fill-current drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]" />
                     ) : (
-                      <Play className="w-12 h-12 text-white fill-current drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
+                      <Play className="w-10 h-10 text-white fill-current drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]" />
                     )}
                   </div>
                 </div>
